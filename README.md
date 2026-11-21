@@ -228,3 +228,10 @@ Its production build is committed to `src/Penrill.Server/wwwroot`, so this repos
 1. Check out the `penrill` repository next to `penrill-server`.
 2. Start `penrill-server` (`dotnet run --project src/Penrill.Server`).
 3. In the `penrill` repository, run `npm run dev:server-ui` (opens on `http://localhost:5175`), and `npm run build:server-ui` to update `src/Penrill.Server/wwwroot`.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests need a signed
+[Contributor License Agreement](https://github.com/Penrill/penrill/blob/main/CLA.md); a bot asks for it on your first one.
