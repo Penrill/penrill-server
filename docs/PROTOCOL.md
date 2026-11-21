@@ -81,11 +81,12 @@ All routes take `Authorization: Bearer <token>` except register and login.
 
 | Route | Purpose |
 |---|---|
-| `GET /api/boards` | boards the account can open: `[{ id, title, seq, updated }]` |
+| `GET /api/boards` | boards the account can open: `[{ id, title, seq, updated, owner }]` |
 | `PUT /api/boards/{id}` | create a board from `{ title, background, items }`; repeating it is safe |
 | `GET /api/boards/{id}` | snapshot |
 | `GET /api/boards/{id}/changes?after=N` | `{ seq, changes }`, or 410 when the client must take a snapshot |
 | `POST /api/boards/{id}/changes` | submit one change, answers `{ seq }` |
+| `DELETE /api/boards/{id}` | owner only: delete the board, its history and folder shares (204; 403 for others). Live connections close with 4404, and devices keep their copy as a local board |
 | `PUT /api/boards/{id}/assets/{sha256}` | upload image bytes; the server checks the hash |
 | `GET /api/boards/{id}/assets/{sha256}` | download image bytes (immutable) |
 

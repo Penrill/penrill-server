@@ -50,7 +50,7 @@ public static class PenrillApiExtensions
         var origins = builder.Configuration["PENRILL_EDITOR_ORIGINS"] ?? "https://penrill.com,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173";
         services.AddCors(options => options.AddDefaultPolicy(policy => policy
             .WithOrigins(origins.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
-            .WithMethods("GET", "PUT", "POST")
+            .WithMethods("GET", "PUT", "POST", "DELETE")
             .WithHeaders("Content-Type", "Authorization")));
         return builder;
     }

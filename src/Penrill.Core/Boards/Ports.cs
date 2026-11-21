@@ -28,6 +28,11 @@ public interface IBoardStore
     Task SaveSnapshot(SnapshotRecord snapshot, int retainBodies, TimeSpan retainReceipts, CancellationToken cancel);
     Task<bool> Create(NewBoard board, CancellationToken cancel);
     Task<IReadOnlyList<BoardSummary>> List(string user, CancellationToken cancel);
+    /// <summary>
+    /// Removes a board with its change log, folder shares and asset records, but only for its owner:
+    /// <c>Allowed</c> once deleted, <c>Denied</c> for anyone else (boards without an owner included).
+    /// </summary>
+    Task<BoardAccess> Delete(string board, string user, CancellationToken cancel);
     Task AddAsset(string board, AssetInfo asset, CancellationToken cancel);
     Task<AssetInfo?> FindAsset(string board, string hash, CancellationToken cancel);
 }

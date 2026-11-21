@@ -85,6 +85,31 @@ public sealed class ApiTests : IDisposable
     }
 
     [Fact]
+    public async Task OnlyTheOwnerDeletesABoardAndEveryoneOnItIsDisconnected()
+    {
+        var (ann, _) = await SignUp("ann");
+        var (bob, bobToken) = await SignUp("bob");
+        Assert.Equal(HttpStatusCode.Created, (await CreateBoard(ann)).StatusCode);
+        (await ann.PostAsJsonAsync("/api/folders", new { name = "7-B" })).EnsureSuccessStatusCode();
+        var folder = (string)(await ann.GetFromJsonAsync<JsonObject>("/api/community"))!["folders"]![0]!["id"]!;
+        (await ann.PostAsJsonAsync("/api/members", new { folder, name = "bob" })).EnsureSuccessStatusCode();
+        (await ann.PostAsJsonAsync("/api/share-board", new { folder, board = Board })).EnsureSuccessStatusCode();
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.DeleteAsync($"/api/boards/{Board}")).StatusCode);
+        var socket = await Connect(bobToken, null);
+        await NextOf(socket, "snapshot");
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync($"/api/boards/{Board}")).StatusCode);
+        while (await Next(socket) is not null) { }
+        Assert.Equal((WebSocketCloseStatus)4404, socket.CloseStatus);
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Empty((await bob.GetFromJsonAsync<JsonArray>("/api/boards"))!);
+        Assert.Empty((await bob.GetFromJsonAsync<JsonObject>("/api/community"))!["boards"]!.AsArray());
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.DeleteAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await CreateBoard(ann)).StatusCode);
+    }
+
+    [Fact]
     public async Task CreatingABoardTwiceIsSafe()
     {
         var (ann, _) = await SignUp("ann");

@@ -79,6 +79,20 @@ internal sealed class SqliteBoardStore(SqliteDatabase database) : IBoardStore
         return Task.FromResult(boards);
     }
 
+    public Task<BoardAccess> Delete(string board, string user, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        using var transaction = db.BeginTransaction();
+        if (db.Scalar("SELECT 1 FROM boards WHERE id=$id", ("id", board)) is null) return Task.FromResult(BoardAccess.Missing);
+        if (db.Scalar("SELECT user FROM owners WHERE board=$id", ("id", board)) is not string owner || owner != user)
+            return Task.FromResult(BoardAccess.Denied);
+        foreach (var table in (string[])["changes", "assets"]) db.Execute($"DELETE FROM {table} WHERE board=$id", ("id", board));
+        foreach (var table in (string[])["owners", "folder_boards"]) db.Execute($"DELETE FROM {table} WHERE board=$id", ("id", board));
+        db.Execute("DELETE FROM boards WHERE id=$id", ("id", board));
+        transaction.Commit();
+        return Task.FromResult(BoardAccess.Allowed);
+    }
+
     public Task AddAsset(string board, AssetInfo asset, CancellationToken cancel)
     {
         using var db = database.Open();

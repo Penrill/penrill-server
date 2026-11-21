@@ -51,6 +51,29 @@ public sealed class RoomRegistry(IBoardStore store, RoomOptions options, TimePro
         foreach (var room in idle) await room.Close();
     }
 
+    /// <summary>
+    /// After a board was deleted: forgets its room and disconnects everyone on it. Changes still in
+    /// flight fail, since the store no longer has the board.
+    /// </summary>
+    public async Task Forget(string boardId)
+    {
+        Entry? entry;
+        lock (sync)
+        {
+            if (!rooms.Remove(boardId, out entry)) return;
+        }
+        BoardRoom? room;
+        try
+        {
+            room = await entry.Room;
+        }
+        catch
+        {
+            return; // The room never loaded: nobody is on it.
+        }
+        if (room is not null) await room.Close(LiveCloseReason.NotFound);
+    }
+
     public async Task CloseAll()
     {
         BoardRoom[] open;
