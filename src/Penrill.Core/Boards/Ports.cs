@@ -2,7 +2,8 @@ namespace Penrill.Core.Boards;
 
 public enum BoardAccess { Missing, Denied, Allowed }
 
-public sealed record BoardSummary(string Id, string Title, long Seq, DateTimeOffset Updated);
+/// <summary>A board the user can open. <c>Owner</c> is who made it; empty for boards from before accounts.</summary>
+public sealed record BoardSummary(string Id, string Title, long Seq, DateTimeOffset Updated, string Owner);
 
 public sealed record StoredChange(long Seq, string Id, string Author, byte[] Body);
 
@@ -27,6 +28,11 @@ public interface IBoardStore
     Task SaveSnapshot(SnapshotRecord snapshot, int retainBodies, TimeSpan retainReceipts, CancellationToken cancel);
     Task<bool> Create(NewBoard board, CancellationToken cancel);
     Task<IReadOnlyList<BoardSummary>> List(string user, CancellationToken cancel);
+    /// <summary>
+    /// Removes a board with its change log, folder shares and asset records, but only for its owner:
+    /// <c>Allowed</c> once deleted, <c>Denied</c> for anyone else (boards without an owner included).
+    /// </summary>
+    Task<BoardAccess> Delete(string board, string user, CancellationToken cancel);
     Task AddAsset(string board, AssetInfo asset, CancellationToken cancel);
     Task<AssetInfo?> FindAsset(string board, string hash, CancellationToken cancel);
 }

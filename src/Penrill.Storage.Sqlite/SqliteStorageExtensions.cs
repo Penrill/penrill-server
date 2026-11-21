@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Penrill.Core.Accounts;
+using Penrill.Core.Admin;
 using Penrill.Core.Boards;
 using Penrill.Core.Sharing;
 
@@ -19,6 +20,10 @@ public static class SqliteStorageExtensions
         services.AddHostedService<SqliteStartup>();
         services.AddSingleton<IBoardStore, SqliteBoardStore>();
         services.AddSingleton<IAccountStore, SqliteAccountStore>();
+        services.AddSingleton<IGrantStore, SqliteGrantStore>();
+        services.AddSingleton<SqliteAdminStore>();
+        services.AddSingleton<IAdminStore>(provider => provider.GetRequiredService<SqliteAdminStore>());
+        services.AddSingleton<ISettingsStore>(provider => provider.GetRequiredService<SqliteAdminStore>());
         services.AddSingleton<IAssetStore, FileAssetStore>();
         services.AddSingleton<SqliteSharingStore>();
         services.AddSingleton<IBoardAccess>(provider => provider.GetRequiredService<SqliteSharingStore>());

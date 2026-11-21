@@ -69,10 +69,28 @@ internal sealed class SqliteBoardStore(SqliteDatabase database) : IBoardStore
     {
         using var db = database.Open();
         IReadOnlyList<BoardSummary> boards = db.Rows(
-            $"SELECT id, title, seq, updated FROM boards WHERE id IN ({SqlAccess.BoardsOf}) ORDER BY updated DESC, id",
-            row => new BoardSummary(row.GetString(0), row.GetString(1), row.GetInt64(2), SqliteCommands.ParseStamp(row.GetString(3))),
+            $"""
+            SELECT boards.id, boards.title, boards.seq, boards.updated, coalesce(owners.user, '')
+            FROM boards LEFT JOIN owners ON owners.board=boards.id
+            WHERE boards.id IN ({SqlAccess.BoardsOf}) ORDER BY boards.updated DESC, boards.id
+            """,
+            row => new BoardSummary(row.GetString(0), row.GetString(1), row.GetInt64(2), SqliteCommands.ParseStamp(row.GetString(3)), row.GetString(4)),
             ("user", user));
         return Task.FromResult(boards);
+    }
+
+    public Task<BoardAccess> Delete(string board, string user, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        using var transaction = db.BeginTransaction();
+        if (db.Scalar("SELECT 1 FROM boards WHERE id=$id", ("id", board)) is null) return Task.FromResult(BoardAccess.Missing);
+        if (db.Scalar("SELECT user FROM owners WHERE board=$id", ("id", board)) is not string owner || owner != user)
+            return Task.FromResult(BoardAccess.Denied);
+        foreach (var table in (string[])["changes", "assets"]) db.Execute($"DELETE FROM {table} WHERE board=$id", ("id", board));
+        foreach (var table in (string[])["owners", "folder_boards", "board_people", "board_links"]) db.Execute($"DELETE FROM {table} WHERE board=$id", ("id", board));
+        db.Execute("DELETE FROM boards WHERE id=$id", ("id", board));
+        transaction.Commit();
+        return Task.FromResult(BoardAccess.Allowed);
     }
 
     public Task AddAsset(string board, AssetInfo asset, CancellationToken cancel)

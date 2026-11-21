@@ -8,12 +8,13 @@ using Penrill.Core.Telemetry;
 
 namespace Penrill.Api.Hosting;
 
-internal sealed class BearerSessionHandler(
+public sealed class BearerSessionHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory loggers, UrlEncoder encoder, AccountService accounts)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, loggers, encoder)
 {
     public const string SchemeName = "PenrillSession";
     public const string TokenHashClaim = "penrill:token";
+    public const string CredentialClaim = "penrill:credential";
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -25,12 +26,19 @@ internal sealed class BearerSessionHandler(
             PenrillTelemetry.AuthFailures.Add(1, PenrillTelemetry.Tag("kind", "token"));
             return AuthenticateResult.Fail("The session is unknown or expired.");
         }
-        var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, session.User), new Claim(TokenHashClaim, session.TokenHash)], SchemeName);
-        return AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName));
+        return AuthenticateResult.Success(new AuthenticationTicket(Principal(session, SchemeName), SchemeName));
     }
+
+    public static ClaimsPrincipal Principal(AccountSession session, string scheme) => new(new ClaimsIdentity(
+    [
+        new Claim(ClaimTypes.Name, session.User),
+        new Claim(ClaimTypes.Role, session.Role.ToString()),
+        new Claim(TokenHashClaim, session.TokenHash),
+        new Claim(CredentialClaim, session.CredentialId)
+    ], scheme));
 }
 
-internal static class PrincipalExtensions
+public static class PrincipalExtensions
 {
     public static string UserName(this ClaimsPrincipal user) => user.Identity?.Name ?? throw new InvalidOperationException("Not signed in.");
 }

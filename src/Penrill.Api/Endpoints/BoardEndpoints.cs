@@ -22,6 +22,23 @@ internal static partial class BoardEndpoints
         boards.MapGet("/{id}", Snapshot);
         boards.MapGet("/{id}/changes", ChangesAfter);
         boards.MapPost("/{id}/changes", Submit);
+        boards.MapDelete("/{id}", Delete);
+    }
+
+    /// <summary>Only the board's owner can delete it; devices still syncing it find it gone (404).</summary>
+    private static async Task<IResult> Delete(
+        string id, ClaimsPrincipal user, IBoardStore store, RoomRegistry rooms, ILoggerFactory loggers, CancellationToken cancel)
+    {
+        if (!BoardLimits.IsBoardId(id)) return Results.BadRequest();
+        var name = user.UserName();
+        switch (await store.Delete(id, name, cancel))
+        {
+            case BoardAccess.Missing: return Results.NotFound();
+            case BoardAccess.Denied: return Results.Forbid();
+        }
+        await rooms.Forget(id);
+        LogDeleted(loggers.CreateLogger("Penrill.Boards"), id, name);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> Create(
@@ -86,6 +103,9 @@ internal static partial class BoardEndpoints
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Created board {Board} for {User} with {Items} items")]
     private static partial void LogCreated(ILogger logger, string board, string user, int items);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deleted board {Board} for {User}")]
+    private static partial void LogDeleted(ILogger logger, string board, string user);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Rejected malformed change {Change} on board {Board} from {User}")]
     private static partial void LogInvalidChange(ILogger logger, string change, string board, string user);

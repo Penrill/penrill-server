@@ -1,0 +1,11 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!-- Lets Penrill editors on the same network find this server without typing an address. -->
+<service-group>
+  <name replace-wildcards="yes">Penrill on %h</name>
+  <service>
+    <type>_penrill._tcp</type>
+    <port>5081</port>
+    <txt-record>v=1</txt-record>
+  </service>
+</service-group>

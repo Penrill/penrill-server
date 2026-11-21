@@ -19,7 +19,7 @@ public sealed class ApiTests : IDisposable
 
     public ApiTests()
     {
-        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("PENRILL_DATA_DIR", directory));
+        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("PENRILL_DATA_DIR", directory).UseSetting("PENRILL_OPEN_REGISTRATION", "true"));
     }
 
     public void Dispose()
@@ -82,6 +82,95 @@ public sealed class ApiTests : IDisposable
     {
         var response = await factory.CreateClient().GetAsync("/api/boards");
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task OnlyTheOwnerDeletesABoardAndEveryoneOnItIsDisconnected()
+    {
+        var (ann, _) = await SignUp("ann");
+        var (bob, bobToken) = await SignUp("bob");
+        Assert.Equal(HttpStatusCode.Created, (await CreateBoard(ann)).StatusCode);
+        (await ann.PostAsJsonAsync("/api/folders", new { name = "7-B" })).EnsureSuccessStatusCode();
+        var folder = (string)(await ann.GetFromJsonAsync<JsonObject>("/api/community"))!["folders"]![0]!["id"]!;
+        (await ann.PostAsJsonAsync("/api/members", new { folder, name = "bob" })).EnsureSuccessStatusCode();
+        (await ann.PostAsJsonAsync("/api/share-board", new { folder, board = Board })).EnsureSuccessStatusCode();
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.DeleteAsync($"/api/boards/{Board}")).StatusCode);
+        var socket = await Connect(bobToken, null);
+        await NextOf(socket, "snapshot");
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync($"/api/boards/{Board}")).StatusCode);
+        while (await Next(socket) is not null) { }
+        Assert.Equal((WebSocketCloseStatus)4404, socket.CloseStatus);
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Empty((await bob.GetFromJsonAsync<JsonArray>("/api/boards"))!);
+        Assert.Empty((await bob.GetFromJsonAsync<JsonObject>("/api/community"))!["boards"]!.AsArray());
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.DeleteAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await CreateBoard(ann)).StatusCode);
+    }
+
+    [Fact]
+    public async Task OwnersLetPeopleInByNameAndTakeThemOutAgain()
+    {
+        var (ann, _) = await SignUp("ann");
+        var (bob, _) = await SignUp("bob");
+        await CreateBoard(ann);
+        var people = $"/api/boards/{Board}/people";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.PostAsJsonAsync(people, new { name = "nobody" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsJsonAsync(people, new { name = "bob" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.PostAsJsonAsync(people, new { name = "Bob" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.PostAsJsonAsync(people, new { name = "bob" })).StatusCode);
+        Assert.Equal(["bob"], (await ann.GetFromJsonAsync<string[]>(people))!);
+
+        Assert.Equal(HttpStatusCode.OK, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Single((await bob.GetFromJsonAsync<JsonArray>("/api/boards"))!);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync(people)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"{people}/bob")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync($"{people}/bob")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Empty((await ann.GetFromJsonAsync<string[]>(people))!);
+    }
+
+    [Fact]
+    public async Task AnyoneWithTheLinkDrawsWithoutAnAccountUntilItIsTurnedOff()
+    {
+        var (ann, _) = await SignUp("ann");
+        await CreateBoard(ann);
+        var link = $"/api/boards/{Board}/link";
+        var anonymous = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/join", new { token = "nope", name = "Kid" })).StatusCode);
+        var (bob, _) = await SignUp("bob");
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync(link)).StatusCode);
+        Assert.Null((await ann.GetFromJsonAsync<JsonObject>(link))!["token"]);
+        var token = (string)(await (await ann.PostAsync(link, null)).Content.ReadFromJsonAsync<JsonObject>())!["token"]!;
+        Assert.Equal(token, (string)(await (await ann.PostAsync(link, null)).Content.ReadFromJsonAsync<JsonObject>())!["token"]!);
+        Assert.Equal(token, (string)(await ann.GetFromJsonAsync<JsonObject>(link))!["token"]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await anonymous.PostAsJsonAsync("/api/join", new { token })).StatusCode);
+
+        var joined = (await (await anonymous.PostAsJsonAsync("/api/join", new { token, name = "Kid Ó" })).Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.StartsWith("kid-", (string)joined["name"]!);
+        Assert.Equal(Board, (string)joined["board"]!);
+        var kid = factory.CreateClient();
+        kid.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", (string)joined["token"]!);
+        Assert.Equal(HttpStatusCode.OK, (await kid.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await kid.GetAsync(link)).StatusCode);
+        // Opening the link again on the same device keeps the account it already has.
+        var again = (await (await kid.PostAsJsonAsync("/api/join", new { token, name = "Kid" })).Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal((string)joined["name"]!, (string)again["name"]!);
+        Assert.Null(again["token"]);
+        // So does bob, who has a real account: he just gets the board.
+        Assert.Equal("bob", (string)(await (await bob.PostAsJsonAsync("/api/join", new { token })).Content.ReadFromJsonAsync<JsonObject>())!["name"]!);
+        Assert.Equal(HttpStatusCode.OK, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync(link)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await kid.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Null((await ann.GetFromJsonAsync<JsonObject>(link))!["token"]);
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/join", new { token, name = "Kid" })).StatusCode);
     }
 
     [Fact]
@@ -209,6 +298,8 @@ public sealed class ApiTests : IDisposable
                 CREATE TABLE boards(id TEXT PRIMARY KEY, title TEXT NOT NULL, updated TEXT NOT NULL, revision INTEGER NOT NULL, board BLOB NOT NULL);
                 CREATE TABLE owners(board TEXT PRIMARY KEY, user TEXT NOT NULL);
                 CREATE TABLE sessions(token TEXT PRIMARY KEY, user TEXT NOT NULL, expires INTEGER NOT NULL);
+                CREATE TABLE accounts(name TEXT PRIMARY KEY, password TEXT NOT NULL);
+                INSERT INTO accounts VALUES('ann', 'old hash');
                 CREATE TABLE edit_receipts(board TEXT, user TEXT, key TEXT, revision INTEGER, PRIMARY KEY(board, user, key));
                 INSERT INTO boards VALUES($board, 'Old', '2026-01-01T00:00:00.0000000+00:00', 4, $file);
                 INSERT INTO owners VALUES($board, 'ann');

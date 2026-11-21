@@ -86,7 +86,9 @@ internal static partial class LiveEndpoint
             socket.TrySend(RoomFrames.Welcome(socket));
             await lease.Room.Attach(socket, after, socket.Stopping);
             var sending = socket.Send();
-            using var expiry = time.CreateTimer(_ => socket.Close(LiveCloseReason.SessionEnded), null, session.Expires - time.GetUtcNow(), Timeout.InfiniteTimeSpan);
+            using var expiry = session.Expires is { } expires
+                ? time.CreateTimer(_ => socket.Close(LiveCloseReason.SessionEnded), null, Clamp(expires - time.GetUtcNow()), Timeout.InfiniteTimeSpan)
+                : null;
             try
             {
                 return await Receive(socket, lease.Room, loggers);
@@ -141,6 +143,9 @@ internal static partial class LiveEndpoint
         }
         return socket.Reason;
     }
+
+    /// <summary>Timers cannot wait longer than about 49 days.</summary>
+    private static TimeSpan Clamp(TimeSpan wait) => wait < TimeSpan.Zero ? TimeSpan.Zero : wait > TimeSpan.FromDays(40) ? TimeSpan.FromDays(40) : wait;
 
     private static string? Json(JsonObject message, string key) =>
         message[key] is JsonValue value && value.TryGetValue(out string? text) ? text : null;

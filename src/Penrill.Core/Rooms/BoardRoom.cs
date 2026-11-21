@@ -181,7 +181,7 @@ public sealed partial class BoardRoom
         }
     }
 
-    internal async Task Close()
+    internal async Task Close(LiveCloseReason reason = LiveCloseReason.ServerStopping)
     {
         await gate.WaitAsync();
         try
@@ -203,7 +203,7 @@ public sealed partial class BoardRoom
             remaining = [.. members.Values];
             members.Clear();
         }
-        foreach (var member in remaining) member.Close(LiveCloseReason.ServerStopping);
+        foreach (var member in remaining) member.Close(reason);
         PenrillTelemetry.ActiveRooms.Add(-1);
         LogClosed(logger, BoardId, document.Seq);
     }

@@ -1,10 +1,14 @@
 using System.Collections.Concurrent;
+using Penrill.Core.Accounts;
 using Penrill.Core.Rooms;
 
 namespace Penrill.Api.Live;
 
+/// <summary>Open live sockets by credential; closes them when the credential is signed out, revoked or disabled.</summary>
 public sealed class LiveConnections
 {
+    public LiveConnections(AccountService accounts) => accounts.CredentialRevoked += CloseSession;
+
     private readonly ConcurrentDictionary<Guid, (string TokenHash, IRoomMember Member)> open = new();
 
     public IDisposable Register(string tokenHash, IRoomMember member)

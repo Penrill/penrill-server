@@ -11,7 +11,7 @@ internal sealed partial class SqliteMigrator(SqliteDatabase database, FileAssetS
 {
     private delegate void Migration(SqliteConnection db);
 
-    private Migration[] Migrations => [CreateFirstSchema, MoveToChangeLog];
+    private Migration[] Migrations => [CreateFirstSchema, MoveToChangeLog, AddAccessControl, AddTemplateVersions, AddBoardPeople, AddBoardLinks];
 
     public void Migrate()
     {
@@ -68,6 +68,49 @@ internal sealed partial class SqliteMigrator(SqliteDatabase database, FileAssetS
         foreach (var board in legacy) ImportLegacyBoard(db, board.Id, board.Title, board.Updated, board.Revision, board.File);
         db.Execute("DROP TABLE legacy_boards; DROP TABLE IF EXISTS edit_receipts;");
     }
+
+    /// <summary>
+    /// Roles, device tokens next to web sessions, one-time links (claim, invite, reset) and settings.
+    /// Existing sessions become web sessions, so editors signed in before keep working until they expire.
+    /// </summary>
+    private static void AddAccessControl(SqliteConnection db)
+    {
+        db.Execute("""
+            ALTER TABLE accounts ADD COLUMN role INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE accounts ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE accounts ADD COLUMN created TEXT;
+            CREATE TABLE credentials(
+                token TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, user TEXT NOT NULL, kind INTEGER NOT NULL, device TEXT NOT NULL,
+                created TEXT NOT NULL, last_used TEXT, expires INTEGER);
+            INSERT INTO credentials(token, id, user, kind, device, created, expires)
+                SELECT token, lower(hex(randomblob(8))), user, 0, '', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), expires FROM sessions;
+            DROP TABLE sessions;
+            CREATE INDEX credentials_user ON credentials(user);
+            CREATE INDEX credentials_expires ON credentials(expires) WHERE expires IS NOT NULL;
+            CREATE TABLE grants(
+                token TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, kind INTEGER NOT NULL, subject TEXT NOT NULL, created_by TEXT NOT NULL,
+                created TEXT NOT NULL, expires INTEGER, uses_left INTEGER NOT NULL);
+            CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            """);
+    }
+
+    /// <summary>Shared templates get a version, so copies on devices follow their author's edits.</summary>
+    private static void AddTemplateVersions(SqliteConnection db) =>
+        db.Execute("ALTER TABLE templates ADD COLUMN updated INTEGER NOT NULL DEFAULT 0");
+
+    /// <summary>Owners can let people in by name, without a folder.</summary>
+    private static void AddBoardPeople(SqliteConnection db) =>
+        db.Execute("""
+            CREATE TABLE board_people(board TEXT NOT NULL, user TEXT NOT NULL, PRIMARY KEY(board, user));
+            CREATE INDEX board_people_user ON board_people(user);
+            """);
+
+    /// <summary>A board's draw link lets guests in without an account; they are remembered by the link they used.</summary>
+    private static void AddBoardLinks(SqliteConnection db) =>
+        db.Execute("""
+            CREATE TABLE board_links(board TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE);
+            ALTER TABLE board_people ADD COLUMN via TEXT NOT NULL DEFAULT '';
+            """);
 
     private void ImportLegacyBoard(SqliteConnection db, string id, string title, string updated, long revision, byte[] file)
     {

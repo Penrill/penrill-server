@@ -1,0 +1,169 @@
+name: Release Packages (APT & Snap)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (defaults to Directory.Build.props)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  prepare:
+    name: Test & Resolve Version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            ver="${{ inputs.version }}"
+          elif [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+            ver="${GITHUB_REF_NAME#v}"
+          else
+            ver=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | tr -d '[:space:]')
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "tag=v$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Run tests
+        run: dotnet test -c Release
+
+  deb:
+    name: Build .deb (amd64 & arm64)
+    needs: prepare
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build Debian packages
+        run: sh packaging/build-deb.sh "${{ needs.prepare.outputs.version }}" dist "amd64 arm64"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-packages
+          path: dist/penrill-server_*.deb
+          if-no-files-found: error
+
+  snap:
+    name: Build .snap (${{ matrix.arch }})
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Install Snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Build Snap package
+        run: |
+          ver="${{ needs.prepare.outputs.version }}"
+          sed -i "s/^version:.*/version: '$ver'/" snap/snapcraft.yaml
+          mkdir -p dist
+          sudo snapcraft pack --destructive-mode --output "dist/penrill-server_${ver}_${{ matrix.arch }}.snap"
+          sudo chown "$USER:$USER" "dist/penrill-server_${ver}_${{ matrix.arch }}.snap"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: snap-${{ matrix.arch }}
+          path: dist/penrill-server_*.snap
+          if-no-files-found: error
+
+      - name: Publish to Snap Store
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        env:
+          SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
+        run: |
+          snapcraft upload --release=stable "dist/penrill-server_${{ needs.prepare.outputs.version }}_${{ matrix.arch }}.snap"
+
+  publish:
+    name: Publish GitHub Release & Build APT Repo
+    needs: [prepare, deb, snap]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum penrill-server_* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ needs.prepare.outputs.tag }}"
+          ver="${{ needs.prepare.outputs.version }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" dist/penrill-server_* dist/SHA256SUMS --clobber
+          else
+            gh release create "$tag" dist/penrill-server_* dist/SHA256SUMS \
+              --title "Penrill Server $ver" \
+              --generate-notes
+          fi
+
+      - name: Build APT repository
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          repo="${GITHUB_REPOSITORY#*/}"
+          sh packaging/build-apt-repo.sh dist dist/apt-repo "https://${owner}.github.io/${repo}"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/apt-repo
+
+  deploy-pages:
+    name: Deploy APT Repository to GitHub Pages
+    needs: publish
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
