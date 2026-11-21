@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Penrill.Core/Penrill.Core.csproj" />
+    <Project Path="src/Penrill.Storage.Sqlite/Penrill.Storage.Sqlite.csproj" />
+    <Project Path="src/Penrill.Api/Penrill.Api.csproj" />
+    <Project Path="src/Penrill.Server/Penrill.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Penrill.Tests/Penrill.Tests.csproj" />
+  </Folder>
+</Solution>

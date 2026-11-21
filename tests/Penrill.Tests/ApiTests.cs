@@ -1,0 +1,233 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Net.WebSockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Data.Sqlite;
+
+namespace Penrill.Tests;
+
+public sealed class ApiTests : IDisposable
+{
+    private const string Board = "00112233445566778899aabbccddeeff";
+    private readonly string directory = Directory.CreateTempSubdirectory("penrill-api-").FullName;
+    private readonly WebApplicationFactory<Program> factory;
+
+    public ApiTests()
+    {
+        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("PENRILL_DATA_DIR", directory));
+    }
+
+    public void Dispose()
+    {
+        factory.Dispose();
+        SqliteConnection.ClearAllPools();
+        Directory.Delete(directory, recursive: true);
+    }
+
+    private async Task<(HttpClient Client, string Token)> SignUp(string name)
+    {
+        var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/register", new { name, password = "correct horse battery" });
+        response.EnsureSuccessStatusCode();
+        var token = (string)(await response.Content.ReadFromJsonAsync<JsonObject>())!["token"]!;
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return (client, token);
+    }
+
+    private static Task<HttpResponseMessage> CreateBoard(HttpClient client) =>
+        client.PutAsync($"/api/boards/{Board}", JsonContent.Create(new { title = "Physics", background = "grid", items = new[] { new { id = "seed", z = 1 } } }));
+
+    private static string Put(string changeId, string itemId) =>
+        $$$"""{"id":"{{{changeId}}}","ops":[{"op":"put","item":{"id":"{{{itemId}}}","z":2}}]}""";
+
+    private async Task<WebSocket> Connect(string token, long? after)
+    {
+        var socket = await factory.Server.CreateWebSocketClient().ConnectAsync(new Uri($"ws://localhost/api/boards/{Board}/live"), default);
+        var hello = new JsonObject { ["type"] = "hello", ["protocol"] = 1, ["token"] = token, ["after"] = after };
+        await Send(socket, hello.ToJsonString());
+        return socket;
+    }
+
+    private static Task Send(WebSocket socket, string json) =>
+        socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, default);
+
+    private static async Task<JsonObject?> Next(WebSocket socket)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var message = new MemoryStream();
+        var buffer = new byte[64 * 1024];
+        while (true)
+        {
+            var result = await socket.ReceiveAsync(buffer, timeout.Token);
+            if (result.MessageType == WebSocketMessageType.Close) return null;
+            message.Write(buffer, 0, result.Count);
+            if (result.EndOfMessage) return JsonNode.Parse(message.ToArray())!.AsObject();
+        }
+    }
+
+    private static async Task<JsonObject> NextOf(WebSocket socket, string type)
+    {
+        while (await Next(socket) is { } frame)
+            if ((string)frame["type"]! == type) return frame;
+        throw new InvalidOperationException($"The socket closed before a {type} frame.");
+    }
+
+    [Fact]
+    public async Task RequiresASession()
+    {
+        var response = await factory.CreateClient().GetAsync("/api/boards");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreatingABoardTwiceIsSafe()
+    {
+        var (ann, _) = await SignUp("ann");
+        Assert.Equal(HttpStatusCode.Created, (await CreateBoard(ann)).StatusCode);
+        var again = await CreateBoard(ann);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.False((bool)(await again.Content.ReadFromJsonAsync<JsonObject>())!["created"]!);
+        var (bob, _) = await SignUp("bob");
+        Assert.Equal(HttpStatusCode.Conflict, (await CreateBoard(bob)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task SubmitsOverHttpAndCatchesUp()
+    {
+        var (ann, _) = await SignUp("ann");
+        await CreateBoard(ann);
+        var first = await ann.PostAsync($"/api/boards/{Board}/changes", new StringContent(Put("c1", "a"), Encoding.UTF8, "application/json"));
+        Assert.Equal(1, (long)(await first.Content.ReadFromJsonAsync<JsonObject>())!["seq"]!);
+        var repeated = await ann.PostAsync($"/api/boards/{Board}/changes", new StringContent(Put("c1", "a"), Encoding.UTF8, "application/json"));
+        Assert.Equal(1, (long)(await repeated.Content.ReadFromJsonAsync<JsonObject>())!["seq"]!);
+        var malformed = await ann.PostAsync($"/api/boards/{Board}/changes", new StringContent("""{"id":"c2","ops":[]}""", Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, malformed.StatusCode);
+
+        var changes = await ann.GetFromJsonAsync<JsonObject>($"/api/boards/{Board}/changes?after=0");
+        Assert.Equal(1, (long)changes!["seq"]!);
+        Assert.Single(changes["changes"]!.AsArray());
+        Assert.Equal(HttpStatusCode.Gone, (await ann.GetAsync($"/api/boards/{Board}/changes?after=7")).StatusCode);
+
+        var snapshot = await ann.GetFromJsonAsync<JsonObject>($"/api/boards/{Board}");
+        Assert.Equal(2, snapshot!["items"]!.AsArray().Count);
+        Assert.Equal("Physics", (string)snapshot["title"]!);
+    }
+
+    [Fact]
+    public async Task LiveClientsShareChangesAndResumeAfterADrop()
+    {
+        var (ann, token) = await SignUp("ann");
+        await CreateBoard(ann);
+
+        var tablet = await Connect(token, after: 0);
+        Assert.Equal("welcome", (string)(await Next(tablet))!["type"]!);
+        Assert.Equal(0, (long)(await NextOf(tablet, "ready"))["seq"]!);
+        var laptop = await Connect(token, after: null);
+        Assert.Single((await NextOf(laptop, "snapshot"))["board"]!["items"]!.AsArray());
+        await NextOf(laptop, "ready");
+
+        await Send(tablet, $$"""{"type":"submit","change":{{Put("c1", "a")}}}""");
+        Assert.Equal(1, (long)(await NextOf(tablet, "change"))["seq"]!);
+        Assert.Equal("c1", (string)(await NextOf(laptop, "change"))["change"]!["id"]!);
+
+        await tablet.CloseAsync(WebSocketCloseStatus.NormalClosure, "", default);
+        await Send(laptop, $$"""{"type":"submit","change":{{Put("c2", "b")}}}""");
+        await NextOf(laptop, "change");
+
+        var resumed = await Connect(token, after: 1);
+        var missed = await NextOf(resumed, "changes");
+        Assert.Equal("c2", (string)missed["changes"]![0]!["change"]!["id"]!);
+        await NextOf(resumed, "ready");
+
+        await Send(resumed, $$"""{"type":"submit","change":{{Put("c1", "a")}}}""");
+        var ack = await NextOf(resumed, "ack");
+        Assert.Equal(1, (long)ack["seq"]!);
+        await Send(resumed, """{"type":"submit","change":{"id":"c3","ops":[{"op":"teleport"}]}}""");
+        Assert.Equal("c3", (string)(await NextOf(resumed, "reject"))["id"]!);
+        await Send(resumed, """{"type":"ping"}""");
+        await NextOf(resumed, "pong");
+    }
+
+    [Fact]
+    public async Task LiveConnectionsNeedAValidSessionAndAccess()
+    {
+        var (ann, _) = await SignUp("ann");
+        await CreateBoard(ann);
+        var stranger = await Connect(new string('0', 64), after: null);
+        Assert.Null(await Next(stranger));
+        Assert.Equal((WebSocketCloseStatus)4401, stranger.CloseStatus);
+
+        var (_, bobToken) = await SignUp("bob");
+        var bob = await Connect(bobToken, after: null);
+        Assert.Null(await Next(bob));
+        Assert.Equal((WebSocketCloseStatus)4403, bob.CloseStatus);
+    }
+
+    [Fact]
+    public async Task StoresImagesByTheirHash()
+    {
+        var (ann, _) = await SignUp("ann");
+        await CreateBoard(ann);
+        var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 1, 2, 3 };
+        var hash = Convert.ToHexStringLower(SHA256.HashData(png));
+        ByteArrayContent Image(byte[] bytes)
+        {
+            var content = new ByteArrayContent(bytes);
+            content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            return content;
+        }
+        Assert.Equal(HttpStatusCode.BadRequest, (await ann.PutAsync($"/api/boards/{Board}/assets/{hash}", Image([1, 2]))).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.PutAsync($"/api/boards/{Board}/assets/{hash}", Image(png))).StatusCode);
+        var download = await ann.GetAsync($"/api/boards/{Board}/assets/{hash}");
+        Assert.Equal(png, await download.Content.ReadAsByteArrayAsync());
+        Assert.True(download.Headers.CacheControl!.Private);
+    }
+
+    [Fact]
+    public async Task ImportsBoardsFromTheFirstServerVersion()
+    {
+        var image = new byte[] { 0x89, 0x50, 0x4e, 0x47, 9, 9 };
+        var dataUrl = "data:image/png;base64," + Convert.ToBase64String(image);
+        var file = new JsonObject
+        {
+            ["format"] = "inkboard", ["version"] = 10, ["background"] = "grid",
+            ["assets"] = new JsonObject { ["img1"] = dataUrl },
+            ["items"] = new JsonArray(new JsonObject { ["type"] = "image", ["id"] = "p", ["z"] = 1, ["asset"] = "img1" })
+        };
+        const string token = "1111111111111111111111111111111111111111111111111111111111111111";
+        using (var db = new SqliteConnection($"Data Source={Path.Combine(directory, "boards.db")};Pooling=False"))
+        {
+            db.Open();
+            using var command = db.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE boards(id TEXT PRIMARY KEY, title TEXT NOT NULL, updated TEXT NOT NULL, revision INTEGER NOT NULL, board BLOB NOT NULL);
+                CREATE TABLE owners(board TEXT PRIMARY KEY, user TEXT NOT NULL);
+                CREATE TABLE sessions(token TEXT PRIMARY KEY, user TEXT NOT NULL, expires INTEGER NOT NULL);
+                CREATE TABLE edit_receipts(board TEXT, user TEXT, key TEXT, revision INTEGER, PRIMARY KEY(board, user, key));
+                INSERT INTO boards VALUES($board, 'Old', '2026-01-01T00:00:00.0000000+00:00', 4, $file);
+                INSERT INTO owners VALUES($board, 'ann');
+                INSERT INTO sessions VALUES($hash, 'ann', 4102444800);
+                """;
+            command.Parameters.AddWithValue("$board", Board);
+            command.Parameters.AddWithValue("$file", Encoding.UTF8.GetBytes(file.ToJsonString()));
+            command.Parameters.AddWithValue("$hash", Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))));
+            command.ExecuteNonQuery();
+        }
+
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var board = Assert.Single((await client.GetFromJsonAsync<JsonArray>("/api/boards"))!);
+        Assert.Equal(4, (long)board!["seq"]!);
+        var snapshot = await client.GetFromJsonAsync<JsonObject>($"/api/boards/{Board}");
+        var hash = Convert.ToHexStringLower(SHA256.HashData(image));
+        Assert.Equal(hash, (string)snapshot!["items"]![0]!["asset"]!);
+        Assert.Equal("grid", (string)snapshot["background"]!);
+        Assert.Equal(image, await client.GetByteArrayAsync($"/api/boards/{Board}/assets/{hash}"));
+    }
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=Penrill board synchronization server
+After=network.target
+
+[Service]
+DynamicUser=yes
+StateDirectory=penrill-server
+WorkingDirectory=/usr/lib/penrill-server
+Environment=PENRILL_DATA_DIR=/var/lib/penrill-server
+ExecStart=/usr/lib/penrill-server/Penrill.Server
+Restart=on-failure
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
