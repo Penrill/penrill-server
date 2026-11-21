@@ -175,7 +175,12 @@ curl -fsSL $repo_url/penrill-archive-keyring.gpg -o /usr/share/keyrings/penrill-
 chmod 644 /usr/share/keyrings/penrill-archive-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/penrill-archive-keyring.gpg] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
 apt-get update
-apt-get install -y penrill-server
+PENRILL_INSTALLER=1 apt-get install -y penrill-server
+if ( : </dev/tty ) 2>/dev/null; then
+    /usr/bin/penrill-server configure </dev/tty >/dev/tty 2>&1 || true
+else
+    /usr/bin/penrill-server setup || true
+fi
 INSTALL
 else
     cat > "$out/install.sh" <<INSTALL
@@ -190,7 +195,12 @@ else
     echo "deb [trusted=yes] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
 fi
 apt-get update
-apt-get install -y penrill-server
+PENRILL_INSTALLER=1 apt-get install -y penrill-server
+if ( : </dev/tty ) 2>/dev/null; then
+    /usr/bin/penrill-server configure </dev/tty >/dev/tty 2>&1 || true
+else
+    /usr/bin/penrill-server setup || true
+fi
 INSTALL
 fi
 chmod +x "$out/install.sh"

@@ -11,7 +11,7 @@ WorkingDirectory=/usr/lib/penrill-server
 Environment=PENRILL_DATA_DIR=/var/lib/penrill-server
 Environment=PENRILL_ADDRESS_MODE=lan
 Environment=PENRILL_ADMIN_SOCKET=/run/penrill-server/admin.sock
-ExecStart=/usr/lib/penrill-server/Penrill.Server
+ExecStart=/usr/lib/penrill-server/Penrill.Server --serve
 Restart=on-failure
 NoNewPrivileges=yes
 PrivateTmp=yes

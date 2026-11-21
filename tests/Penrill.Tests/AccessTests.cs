@@ -152,4 +152,23 @@ public sealed class AccessTests : IDisposable
         Assert.True(await admin.SetDisabled("bob", true, default));
         Assert.Equal(HttpStatusCode.Unauthorized, (await As(factory.CreateClient(), token).GetAsync("/api/boards")).StatusCode);
     }
+
+    [Fact]
+    public async Task AdminCanCreateSetPasswordAndDeleteUsers()
+    {
+        var owner = await Owner();
+        var admin = factory.Services.GetRequiredService<Penrill.Core.Admin.AdminService>();
+        Assert.Equal(SignInStatus.Ok, (await admin.CreateUser("bob", Password, Role.Member, default)).Status);
+        var (bobClient, _) = await SignIn("bob");
+
+        Assert.True(await admin.SetPassword("bob", "brand new password", default));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await bobClient.GetAsync("/api/boards")).StatusCode);
+        var relogin = await factory.CreateClient().PostAsJsonAsync("/api/login", new { name = "bob", password = "brand new password" });
+        relogin.EnsureSuccessStatusCode();
+
+        Assert.False(await admin.DeleteUser(owner, default));
+        Assert.True(await admin.DeleteUser("bob", default));
+        var afterDelete = await factory.CreateClient().PostAsJsonAsync("/api/login", new { name = "bob", password = "brand new password" });
+        Assert.Equal(HttpStatusCode.Unauthorized, afterDelete.StatusCode);
+    }
 }

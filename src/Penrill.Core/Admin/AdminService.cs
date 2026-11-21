@@ -1,9 +1,12 @@
 using Penrill.Core.Sharing;
 using Penrill.Core.Accounts;
+using Penrill.Core.Rooms;
 
 namespace Penrill.Core.Admin;
 
 public sealed record OrphanBoard(string Id, string Title, DateTimeOffset Updated);
+
+public sealed record AdminBoard(string Id, string Title, string Owner, long Seq, DateTimeOffset Updated);
 
 public sealed record ServerCounts(int Users, int Boards, int Devices);
 
@@ -11,7 +14,10 @@ public sealed record ServerCounts(int Users, int Boards, int Devices);
 public interface IAdminStore
 {
     Task<IReadOnlyList<OrphanBoard>> Orphans(CancellationToken cancel);
+    Task<IReadOnlyList<AdminBoard>> Boards(CancellationToken cancel);
     Task<bool> AssignOwner(string board, string user, CancellationToken cancel);
+    Task<bool> SetOwner(string board, string user, CancellationToken cancel);
+    Task<bool> DeleteBoard(string board, CancellationToken cancel);
     Task<ServerCounts> Counts(CancellationToken cancel);
     /// <summary>Writes a consistent copy of the database and its assets as a zip archive.</summary>
     Task Backup(Stream output, CancellationToken cancel);
@@ -35,11 +41,25 @@ public static class SettingKeys
 /// One entry point for everything an administrator can do (Facade). The web admin pages and the
 /// command line both call it, so the two front ends cannot drift apart.
 /// </summary>
-public sealed class AdminService(AccountService accounts, IAccountStore store, GrantService grants, IAdminStore admin, ISettingsStore settings, ITemplateStore templates)
+public sealed class AdminService(AccountService accounts, IAccountStore store, GrantService grants, IAdminStore admin, ISettingsStore settings, ITemplateStore templates, RoomRegistry rooms)
 {
     public const int MaxServerName = 64;
 
     public Task<IReadOnlyList<AccountInfo>> Users(CancellationToken cancel) => store.List(cancel);
+
+    public Task<SignInResult> CreateUser(string? user, string? password, Role role, CancellationToken cancel) =>
+        accounts.CreateAccount(user, password, role == Role.Owner ? Role.Admin : role, cancel);
+
+    public async Task<bool> SetPassword(string? user, string? password, CancellationToken cancel)
+    {
+        if (AccountService.Normalize(user) is not { } name || await store.Find(name, cancel) is null) return false;
+        if (!await accounts.SetPassword(name, password, cancel)) return false;
+        await accounts.RevokeAll(name, cancel);
+        return true;
+    }
+
+    public async Task<bool> DeleteUser(string? user, CancellationToken cancel) =>
+        AccountService.Normalize(user) is { } name && await accounts.DeleteAccount(name, cancel);
 
     public Task<IReadOnlyList<DeviceInfo>> Devices(CancellationToken cancel) => accounts.Devices(null, cancel);
 
@@ -68,8 +88,20 @@ public sealed class AdminService(AccountService accounts, IAccountStore store, G
 
     public Task<IReadOnlyList<OrphanBoard>> Orphans(CancellationToken cancel) => admin.Orphans(cancel);
 
+    public Task<IReadOnlyList<AdminBoard>> Boards(CancellationToken cancel) => admin.Boards(cancel);
+
     public async Task<bool> AssignOwner(string board, string? user, CancellationToken cancel) =>
         AccountService.Normalize(user) is { } name && await admin.AssignOwner(board, name, cancel);
+
+    public async Task<bool> SetBoardOwner(string board, string? user, CancellationToken cancel) =>
+        AccountService.Normalize(user) is { } name && await admin.SetOwner(board, name, cancel);
+
+    public async Task<bool> DeleteBoard(string board, CancellationToken cancel)
+    {
+        if (!await admin.DeleteBoard(board, cancel)) return false;
+        await rooms.Forget(board);
+        return true;
+    }
 
     public Task<ServerCounts> Counts(CancellationToken cancel) => admin.Counts(cancel);
 

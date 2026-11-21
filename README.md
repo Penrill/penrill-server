@@ -56,14 +56,27 @@ sudo apt install ./penrill-server_0.3.0_amd64.deb
 
 ---
 
-## First-Time Setup
+## First-Time Setup & Interactive Configurator
 
-1. **Open the setup link:** When the package is installed, it starts the service and prints a one-time setup link and QR code in the terminal. If you missed it, run:
-   ```sh
-   sudo penrill-server setup
-   ```
-2. **Claim the server:** Open the link (or scan the QR code) in a browser on any device connected to the same local network, name your server, and create the **owner** account.
-3. **Verify the TLS certificate:** Because the server generates its own self-signed TLS certificate for local network encryption, your browser will show a one-time certificate warning. You can verify the certificate's short fingerprint (e.g. `3F9A-12C4-77B0`) on the setup page, in **Admin › Server**, or by running `sudo penrill-server status`. The Penrill app pins and verifies this certificate automatically.
+When installed via `install.sh`, the **Penrill Server Interactive Configurator** launches automatically in your terminal. You can also launch it anytime by running:
+
+```sh
+sudo penrill-server
+```
+
+### Option A: Terminal Setup Wizard
+
+Choose **Configure right here in the terminal** to set up your server directly over SSH without needing a browser:
+1. Enter a **Server display name** (e.g. `Penrill on raspberrypi`).
+2. Create the **Owner username** and **password**.
+3. Set the **Administrator contact email**.
+4. Immediately receive your server address and a terminal QR code to connect Penrill devices.
+
+### Option B: Browser Setup Link
+
+1. Run `sudo penrill-server setup` (or select **Finish setup in a web browser** in the interactive configurator) to print a one-time setup link and QR code.
+2. Open the link in a browser on any device in the same local network and create the **owner** account.
+3. **Verify the TLS certificate:** Because the server generates its own self-signed TLS certificate for local network encryption, your browser will show a one-time certificate warning. You can verify the certificate's short fingerprint (e.g. `3F9A-12C4-77B0`) on the setup page, in **Admin › Server**, or via `sudo penrill-server status`. The Penrill app pins and verifies this certificate automatically.
 
 ---
 
@@ -103,23 +116,33 @@ sudo penrill-server invite --admin --days 14
 
 ---
 
-## Command-Line Interface
+## Command-Line Interface & Interactive Control Center
 
-All CLI commands communicate with the running server over its local Unix admin socket, so run them with `sudo`:
+Run `sudo penrill-server` (or `sudo penrill-server configure`) to open the **Interactive Control Center** with arrow-key navigation (`↑`/`↓`, `Enter`, `Esc`) for managing users, passwords, invites, devices, boards, network settings, backups, and uninstallation.
+
+You can also run any command directly for quick actions or scripting:
 
 | Command | Description |
 | :--- | :--- |
+| `sudo penrill-server` / `configure` | Launch the interactive terminal configurator & control panel |
 | `sudo penrill-server status` | Show server name, version, address, TLS fingerprint, and user/board/device counts |
 | `sudo penrill-server setup` | Print a new one-time setup link and QR code (while the server has no owner) |
 | `sudo penrill-server link` | Print the server address, Penrill connect link, and QR code |
 | `sudo penrill-server invite` | Create an invite link (`--admin`, `--uses N`, `--days N`) |
-| `sudo penrill-server reset-password USER` | Generate a one-hour password reset link for `USER` |
 | `sudo penrill-server users` | List all accounts, roles, and statuses |
-| `sudo penrill-server devices` | List linked devices, or revoke one with `--revoke ID` |
+| `sudo penrill-server create-user USER` | Create an account directly (`--admin`, `--password PASS` or interactive prompt) |
+| `sudo penrill-server set-password USER` | Set a new password immediately in the terminal (works for all accounts including owner) |
+| `sudo penrill-server reset-password USER` | Generate a one-hour browser password reset link & QR code for `USER` |
+| `sudo penrill-server delete-user USER` | Permanently delete a user account and revoke all its sessions |
+| `sudo penrill-server role USER member\|admin` | Change an account's role between `member` and `admin` |
 | `sudo penrill-server disable USER` | Disable an account and sign it out everywhere |
 | `sudo penrill-server enable USER` | Re-enable a disabled account |
+| `sudo penrill-server devices` | List linked devices, or revoke one with `--revoke ID` |
+| `sudo penrill-server boards` | List all boards, reassign owner (`--owner ID USER`), or delete (`--delete ID`) |
 | `sudo penrill-server rename NAME` | Change the server name displayed in Penrill editors |
+| `sudo penrill-server email ADDRESS` | Update the administrator contact email |
 | `sudo penrill-server backup [FILE]` | Export all boards, images, and accounts into a single `.zip` archive |
+| `sudo penrill-server uninstall` | Uninstall Penrill Server (`--purge` to also delete all boards and data, `--yes` to skip prompt) |
 
 ---
 
