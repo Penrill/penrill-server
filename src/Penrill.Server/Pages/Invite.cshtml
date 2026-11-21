@@ -1,0 +1,27 @@
+@page "/invite/{token?}"
+@model InviteModel
+@{ ViewData["Title"] = "Join"; }
+<div class="narrow">
+    @if (!Model.Valid)
+    {
+        <h1>This invite does not work</h1>
+        <p class="lead">It has expired or was already used. Ask for a new one.</p>
+    }
+    else
+    {
+        <h1>Join this Penrill server</h1>
+        <p class="lead">Create your account. Then connect Penrill in one click.</p>
+        <form method="post" class="stack">
+            <label>Username
+                <input asp-for="Name" autocomplete="username" required pattern="[a-z0-9_\-]{3,32}" autocapitalize="none" spellcheck="false" autofocus>
+                <small>Lowercase letters, digits, - and _</small>
+            </label>
+            <label>Password
+                <input asp-for="Password" type="password" autocomplete="new-password" required minlength="10" maxlength="256">
+                <small>At least 10 characters</small>
+            </label>
+            @if (Model.Error is { } error) { <p class="error" role="alert">@error</p> }
+            <button class="primary" type="submit">Create account</button>
+        </form>
+    }
+</div>

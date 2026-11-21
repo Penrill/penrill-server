@@ -1,0 +1,28 @@
+@page "/admin/devices"
+@model Penrill.Server.Pages.Admin.DevicesModel
+@{ ViewData["Title"] = "Devices"; }
+<h1>Administration</h1>
+<p class="lead">Every device connected to this server.</p>
+<partial name="_AdminTabs" />
+@if (Model.Devices.Count == 0)
+{
+    <p class="muted">No devices are connected yet.</p>
+}
+else
+{
+    <div class="table"><table>
+        <thead><tr><th>User</th><th>Device</th><th>Connected</th><th>Last used</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var device in Model.Devices)
+        {
+            <tr>
+                <td>@device.User</td>
+                <td>@device.Name</td>
+                <td>@device.Created.ToLocalTime().ToString("d")</td>
+                <td>@(device.LastUsed?.ToLocalTime().ToString("d") ?? "never")</td>
+                <td class="actions"><form method="post" asp-page-handler="Revoke"><input type="hidden" name="id" value="@device.Id"><button class="danger" type="submit">Disconnect</button></form></td>
+            </tr>
+        }
+        </tbody>
+    </table></div>
+}

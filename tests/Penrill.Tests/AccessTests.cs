@@ -1,0 +1,155 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using System.Text.Json.Nodes;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
+using Penrill.Core.Accounts;
+using Penrill.Core.Linking;
+
+namespace Penrill.Tests;
+
+/// <summary>Claiming a server, invites, password resets, device linking and revoking devices.</summary>
+public sealed class AccessTests : IDisposable
+{
+    private const string Password = "correct horse battery";
+    private readonly string directory = Directory.CreateTempSubdirectory("penrill-access-").FullName;
+    private readonly WebApplicationFactory<Program> factory;
+
+    public AccessTests()
+    {
+        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("PENRILL_DATA_DIR", directory));
+    }
+
+    public void Dispose()
+    {
+        factory.Dispose();
+        SqliteConnection.ClearAllPools();
+        Directory.Delete(directory, recursive: true);
+    }
+
+    private GrantService Grants => factory.Services.GetRequiredService<GrantService>();
+
+    private async Task<string> Owner(string name = "ann")
+    {
+        var claim = await Grants.CreateClaim(default);
+        Assert.NotNull(claim);
+        Assert.Equal(RedeemStatus.Ok, (await Grants.Claim(claim, name, Password, default)).Status);
+        return name;
+    }
+
+    private async Task<(HttpClient Client, string Token)> SignIn(string name)
+    {
+        var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/login", new { name, password = Password });
+        response.EnsureSuccessStatusCode();
+        var token = (string)(await response.Content.ReadFromJsonAsync<JsonObject>())!["token"]!;
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return (client, token);
+    }
+
+    private static HttpClient As(HttpClient client, string token)
+    {
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return client;
+    }
+
+    [Fact]
+    public async Task RegistrationIsClosedByDefault()
+    {
+        var response = await factory.CreateClient().PostAsJsonAsync("/api/register", new { name = "eve", password = Password });
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var server = await factory.CreateClient().GetFromJsonAsync<JsonObject>("/api/server");
+        Assert.Equal("invite", (string)server!["registration"]!);
+    }
+
+    [Fact]
+    public async Task OnlyOneClaimMakesAnOwner()
+    {
+        var claim = await Grants.CreateClaim(default);
+        Assert.Equal(RedeemStatus.Ok, (await Grants.Claim(claim, "ann", Password, default)).Status);
+        Assert.Equal(RedeemStatus.Expired, (await Grants.Claim(claim, "bob", Password, default)).Status);
+        Assert.Null(await Grants.CreateClaim(default));
+        var owner = await factory.Services.GetRequiredService<AccountService>().Find("ann", default);
+        Assert.Equal(Role.Owner, owner!.Role);
+    }
+
+    [Fact]
+    public async Task InvitesAreSingleUseAndSurviveATakenName()
+    {
+        var owner = await Owner();
+        var invite = await Grants.CreateInvite(owner, Role.Member, null, 1, default);
+        Assert.Equal(RedeemStatus.Taken, (await Grants.AcceptInvite(invite.Token, owner, Password, default)).Status);
+        Assert.Equal(RedeemStatus.Ok, (await Grants.AcceptInvite(invite.Token, "bob", Password, default)).Status);
+        Assert.Equal(RedeemStatus.Expired, (await Grants.AcceptInvite(invite.Token, "cid", Password, default)).Status);
+        await SignIn("bob");
+    }
+
+    [Fact]
+    public async Task ResetLinkSetsPasswordAndSignsOutEverywhere()
+    {
+        var owner = await Owner();
+        var (client, _) = await SignIn(owner);
+        var reset = await Grants.CreateReset(owner, owner, default);
+        Assert.Equal(RedeemStatus.Ok, (await Grants.Reset(reset!.Token, "another long password", default)).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/boards")).StatusCode);
+        var response = await factory.CreateClient().PostAsJsonAsync("/api/login", new { name = owner, password = "another long password" });
+        response.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task LinksADeviceAfterApproval()
+    {
+        var owner = await Owner();
+        var editor = factory.CreateClient();
+        var start = await (await editor.PostAsJsonAsync("/api/link/start", new { device = "MacBook", app = "penrill 0.14" })).Content.ReadFromJsonAsync<JsonObject>();
+        var userCode = (string)start!["userCode"]!;
+        var deviceCode = (string)start["deviceCode"]!;
+        Assert.Matches("^[A-Z]{4}-[A-Z]{4}$", userCode);
+        Assert.EndsWith("/link?code=" + userCode, (string)start["verifyUrlComplete"]!);
+
+        var (browser, _) = await SignIn(owner);
+        var info = await browser.GetFromJsonAsync<JsonObject>("/api/link/" + userCode.ToLowerInvariant().Replace("-", " "));
+        Assert.Equal("MacBook", (string)info!["device"]!);
+
+        var poll = editor.PostAsJsonAsync("/api/link/poll", new { deviceCode });
+        Assert.Equal(HttpStatusCode.NoContent, (await browser.PostAsJsonAsync("/api/link/" + userCode, new { allow = true })).StatusCode);
+        var linked = await (await poll).Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal(owner, (string)linked!["name"]!);
+        var token = (string)linked["token"]!;
+
+        Assert.Equal(HttpStatusCode.Gone, (await editor.PostAsJsonAsync("/api/link/poll", new { deviceCode })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await As(factory.CreateClient(), token).GetAsync("/api/boards")).StatusCode);
+
+        var devices = await browser.GetFromJsonAsync<JsonArray>("/api/devices");
+        var device = Assert.Single(devices!);
+        Assert.Equal("MacBook", (string)device!["name"]!);
+        Assert.Equal(HttpStatusCode.NoContent, (await browser.PostAsync($"/api/devices/{device["id"]}/revoke", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await As(factory.CreateClient(), token).GetAsync("/api/boards")).StatusCode);
+    }
+
+    [Fact]
+    public async Task DeniedLinkGivesNoToken()
+    {
+        var owner = await Owner();
+        var links = factory.Services.GetRequiredService<LinkService>();
+        var start = links.Start("Laptop", "", "")!;
+        Assert.True(links.Decide(start.UserCode, owner, allow: false));
+        Assert.False(links.Decide(start.UserCode, owner, allow: true));
+        Assert.Equal(PollStatus.Denied, (await links.Poll(start.DeviceCode, default)).Status);
+    }
+
+    [Fact]
+    public async Task DisablingAUserRevokesTheirDevices()
+    {
+        var owner = await Owner();
+        var invite = await Grants.CreateInvite(owner, Role.Member, null, 1, default);
+        await Grants.AcceptInvite(invite.Token, "bob", Password, default);
+        var token = await factory.Services.GetRequiredService<AccountService>().IssueDeviceToken("bob", "Tablet", default);
+        var admin = factory.Services.GetRequiredService<Penrill.Core.Admin.AdminService>();
+        Assert.False(await admin.SetDisabled(owner, true, default));
+        Assert.True(await admin.SetDisabled("bob", true, default));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await As(factory.CreateClient(), token).GetAsync("/api/boards")).StatusCode);
+    }
+}

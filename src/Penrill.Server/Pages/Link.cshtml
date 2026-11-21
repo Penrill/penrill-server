@@ -1,0 +1,37 @@
+@page "/link"
+@model LinkModel
+@{ ViewData["Title"] = "Connect a device"; }
+<div class="narrow">
+    @if (Model.Done is { } done)
+    {
+        <h1>Done</h1>
+        <p class="lead">@done</p>
+    }
+    else if (Model.Pending is { } request)
+    {
+        <h1>Connect @request.Device?</h1>
+        <p class="lead">It will sync boards with your account <strong>@User.Identity!.Name</strong>. Check that Penrill shows the same code:</p>
+        <p class="code">@Penrill.Core.Linking.LinkService.Format(request.UserCode)</p>
+        <dl>
+            @if (request.App.Length > 0) { <dt>App</dt><dd>@request.App</dd> }
+            @if (request.Address.Length > 0) { <dt>From</dt><dd>@request.Address</dd> }
+            <dt>Asked</dt><dd><time datetime="@request.Created.ToString("O")">@request.Created.ToLocalTime().ToString("t")</time></dd>
+        </dl>
+        <form method="post" class="row" style="margin-top:32px">
+            <input type="hidden" asp-for="Code">
+            <button class="primary" name="allow" value="true" type="submit">Allow</button>
+            <button name="allow" value="false" type="submit">Deny</button>
+        </form>
+        <p class="hint" style="margin-top:24px">Did not start this in Penrill yourself? Deny it.</p>
+    }
+    else
+    {
+        <h1>Connect a device</h1>
+        <p class="lead">Enter the code Penrill shows.</p>
+        <form method="get" class="stack">
+            <label>Code <input asp-for="Code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="WDJB-MJHT" required></label>
+            @if (Model.Error is { } error) { <p class="error" role="alert">@error</p> }
+            <button class="primary" type="submit">Continue</button>
+        </form>
+    }
+</div>

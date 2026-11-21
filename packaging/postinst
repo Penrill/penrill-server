@@ -2,5 +2,16 @@
 set -e
 if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
     systemctl daemon-reload
-    systemctl try-restart penrill-server.service
+    if [ -z "$2" ]; then
+        systemctl enable --now penrill-server.service
+    else
+        systemctl try-restart penrill-server.service
+    fi
+    systemctl try-reload-or-restart avahi-daemon.service 2>/dev/null || true
+    # A fresh server has no owner yet: show the setup link right here instead of sending people to the journal.
+    i=0
+    while [ ! -S /run/penrill-server/admin.sock ] && [ $i -lt 30 ]; do sleep 0.5; i=$((i + 1)); done
+    if /usr/bin/penrill-server status 2>/dev/null | grep -q "none yet"; then
+        /usr/bin/penrill-server setup || true
+    fi
 fi

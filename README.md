@@ -1,56 +1,76 @@
 # Penrill Server
 
-Local ASP.NET Core API for synchronized Penrill boards, licensed under FSL-1.1-MIT.
-Run `dotnet run --project src/Penrill.Server` using .NET 10. The development API binds to http://127.0.0.1:5081. SQLite data lives under the server project in data/boards.db. Override with PENRILL_DATA_DIR.
+Keeps Penrill boards in sync across your devices and lets you share them, on your own hardware.
+Licensed under FSL-1.1-MIT. Design: `docs/CONNECT.md` in the editor repository; wire protocol: `docs/PROTOCOL.md`.
 
-GET /api/boards lists board IDs, titles, revisions and update times. GET /api/boards/{id}?revision=N reads that revision if it is still current. PUT /api/boards/{id}?title=TITLE&revision=N writes an exported UTF-8 board as application/json. Use revision zero and a new 32-character hex ID to create a board. Updates require the current revision. A stale write returns HTTP 409. Repeating a write of identical title and bytes after a lost response is safe. Imported boards from versions without accounts stay in the database without an assigned owner. A server administrator can assign an existing board to a registered account locally (see below).
+## Install
 
-Configure PENRILL_EDITOR_ORIGINS with comma-separated browser origins. Run `dotnet build src/Penrill.Server` and `node --test tests/sync.mjs` to test writes, conflicts and persistence across restarts. See the editor README for the three-repository Aspire setup.
-
-## Raspberry Pi OS (64-bit)
-
-Use the arm64 Debian package on Raspberry Pi OS Bookworm or Trixie (64-bit).
-The package includes the .NET runtime. Install and start the service on the Pi:
+On Debian, Ubuntu or Raspberry Pi OS (64-bit, amd64 or arm64):
 
 ```sh
-sudo apt install ./penrill-server_0.2.0_arm64.deb
-sudo systemctl daemon-reload
-sudo systemctl enable --now penrill-server
-curl --fail http://127.0.0.1:5081/health
+sudo apt install ./penrill-server_0.3.0_arm64.deb
 ```
 
-The service stores boards in /var/lib/penrill-server. Package upgrades preserve them.
-After an upgrade run `sudo systemctl restart penrill-server`.
-Inspect logs with `journalctl -u penrill-server`.
+The package starts the service and prints a setup link with a QR code. Open it in a browser on any
+device in the same network, create the owner account, and you are done. Lost the link? Run
+`sudo penrill-server setup`.
 
-For a private connection from your computer, keep the service on loopback and run
-`ssh -N -L 5083:127.0.0.1:5081 USER@raspberrypi.local` on the computer.
-In Settings, select Self-hosted and connect to http://127.0.0.1:5083.
-Keep the SSH session running while syncing. Create an account or sign in on this server.
-For a web editor on a different origin, set PENRILL_EDITOR_ORIGINS in a systemd
-service override and restart the service.
+The browser warns about the certificate once: the server makes its own. Its fingerprint is shown on
+the setup page, in Admin › Server and by `sudo penrill-server status`. Penrill itself checks it for you.
 
-To build on Debian or Ubuntu with the .NET 10 SDK and dpkg-dev, run
-`sh packaging/build-deb.sh`. The package is written to dist/.
+## Connect Penrill
 
-## Accounts and sharing
+In Penrill, open Sync › Your server and enter the address the server's home page shows. Servers on
+the same network are listed there by themselves. Penrill then asks you to allow it in the browser,
+and boards start syncing. No password is typed into Penrill. On a tablet, scan the QR code on the
+server's home page: penrill.com/connect offers the app or Penrill in the browser. The server's
+address stays in the link's fragment, so it never reaches penrill.com.
 
-Each installation owns its accounts, sessions, shared folders and template marketplace.
-Register or sign in through the editor. Usernames are case-insensitive. Sessions expire after 30 days.
-Boards belong to their creators. Folder owners add existing users by username. Members can
-edit boards shared in that folder. A board can only be shared by its owner.
-Templates published to a folder are visible to members. Marketplace templates are visible
-to signed-in users of the same installation.
+## Add people
 
-Accounts use salted password hashes. Requests use a bearer session token over HTTPS or a local tunnel.
-Registration is open to clients with network access. Keep a private deployment behind the tunnel or VPN.
+Registration is by invite only. Create an invite link in Admin › People, or:
 
-To restore ownership of pre-account boards, back up the database first. Use the local SQLite
-shell to list unassigned boards and registered accounts, then assign the intended board explicitly:
-
-```sql
-SELECT id,title FROM boards WHERE id NOT IN (SELECT board FROM owners);
-SELECT name FROM accounts;
-INSERT INTO owners(board,user)
-SELECT boards.id,accounts.name FROM boards,accounts WHERE boards.id='BOARD_ID' AND accounts.name='USERNAME';
+```sh
+sudo penrill-server invite            # one person, valid 7 days
+sudo penrill-server invite --uses 25  # a class
 ```
+
+Forgotten passwords: Admin › People › Reset password, or `sudo penrill-server reset-password NAME`,
+gives a one-hour link. Boards from server versions before accounts can be given an owner in Admin › Boards.
+
+## Command line
+
+```
+penrill-server status            address, certificate, users, boards
+penrill-server setup             new setup link while there is no owner
+penrill-server link              address, connect link and QR code for Penrill
+penrill-server invite            invite link (--admin, --uses N, --days N)
+penrill-server reset-password U  password reset link
+penrill-server users | devices   list (devices --revoke ID)
+penrill-server disable | enable U
+penrill-server rename NAME
+penrill-server backup FILE       all boards, images and accounts in one zip
+```
+
+The commands talk to the running service over `/run/penrill-server/admin.sock`, so run them with sudo.
+
+## Service
+
+Boards live in `/var/lib/penrill-server` and survive upgrades. Logs: `journalctl -u penrill-server`.
+The service listens on port 5081 with TLS on every interface and is announced on the network as
+`_penrill._tcp` through Avahi. For a web editor on another origin, set `PENRILL_EDITOR_ORIGINS`
+(comma separated) in a systemd override.
+
+## Development
+
+```sh
+dotnet run --project src/Penrill.Server   # http://127.0.0.1:5081, data in src/Penrill.Server/data
+dotnet test
+```
+
+`PENRILL_CONNECT_PAGE` sends connect links to a local web editor (`http://localhost:5174/app/`)
+instead of penrill.com/connect. `PENRILL_ADDRESS_MODE=lan` switches to the installed behaviour (TLS on all interfaces, port from
+`PENRILL_PORT`). `PENRILL_OPEN_REGISTRATION=true` allows anyone to register, as Penrill Cloud does.
+
+Packages: `sh packaging/build-deb.sh [VERSION]` on Debian or Ubuntu with the .NET 10 SDK and dpkg-dev
+builds amd64 and arm64 into dist/.

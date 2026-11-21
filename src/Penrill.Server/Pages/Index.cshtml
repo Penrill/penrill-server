@@ -1,0 +1,36 @@
+@page
+@model IndexModel
+@{ ViewData["Title"] = "Connect"; }
+<h1>Connect Penrill to this server</h1>
+<p class="lead">Boards you draw in Penrill will sync here and stay available on all your devices.</p>
+
+<section class="card connect">
+    <div class="stack-gap">
+        <p><strong>In Penrill, open Sync › Your server and enter this address:</strong></p>
+        <div class="row">
+            <pre class="command" id="address">@Model.Origin</pre>
+            <button type="button" id="copy-address">Copy</button>
+        </div>
+        <p class="muted">Penrill then asks you to allow it here, in this browser. On a tablet or phone, scan the code instead.</p>
+        <p class="hint"><a href="@Model.Link" rel="noreferrer">Connect with a link</a> opens Penrill already pointed at this server, as the app or in the browser.</p>
+    </div>
+    <partial name="_Qr" model="Model.Link" />
+</section>
+@if (Model.ShortPin is { } pin)
+{
+    <p class="hint" style="margin-top:12px">This server uses its own certificate. Its fingerprint starts with <strong>@pin</strong>; Penrill shows the same one when you connect.</p>
+}
+<script>
+    (() => {
+        const copy = document.getElementById('copy-address')
+        copy.addEventListener('click', async () => {
+            try {
+                await navigator.clipboard.writeText(document.getElementById('address').textContent)
+                copy.textContent = 'Copied'
+                setTimeout(() => (copy.textContent = 'Copy'), 1500)
+            } catch {
+                getSelection().selectAllChildren(document.getElementById('address'))
+            }
+        })
+    })()
+</script>

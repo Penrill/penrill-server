@@ -19,7 +19,7 @@ public sealed class ApiTests : IDisposable
 
     public ApiTests()
     {
-        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("PENRILL_DATA_DIR", directory));
+        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => builder.UseSetting("PENRILL_DATA_DIR", directory).UseSetting("PENRILL_OPEN_REGISTRATION", "true"));
     }
 
     public void Dispose()
@@ -209,6 +209,8 @@ public sealed class ApiTests : IDisposable
                 CREATE TABLE boards(id TEXT PRIMARY KEY, title TEXT NOT NULL, updated TEXT NOT NULL, revision INTEGER NOT NULL, board BLOB NOT NULL);
                 CREATE TABLE owners(board TEXT PRIMARY KEY, user TEXT NOT NULL);
                 CREATE TABLE sessions(token TEXT PRIMARY KEY, user TEXT NOT NULL, expires INTEGER NOT NULL);
+                CREATE TABLE accounts(name TEXT PRIMARY KEY, password TEXT NOT NULL);
+                INSERT INTO accounts VALUES('ann', 'old hash');
                 CREATE TABLE edit_receipts(board TEXT, user TEXT, key TEXT, revision INTEGER, PRIMARY KEY(board, user, key));
                 INSERT INTO boards VALUES($board, 'Old', '2026-01-01T00:00:00.0000000+00:00', 4, $file);
                 INSERT INTO owners VALUES($board, 'ann');

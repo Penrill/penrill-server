@@ -3,6 +3,7 @@
     <NoDefaultLaunchSettingsFile>True</NoDefaultLaunchSettingsFile>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="QRCoder" />
     <ProjectReference Include="../Penrill.Api/Penrill.Api.csproj" />
     <ProjectReference Include="../Penrill.Storage.Sqlite/Penrill.Storage.Sqlite.csproj" />
   </ItemGroup>

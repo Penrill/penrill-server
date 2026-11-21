@@ -1,0 +1,41 @@
+@{
+    var signedIn = User.Identity?.IsAuthenticated == true;
+    var admin = User.IsInRole("Admin") || User.IsInRole("Owner");
+    var path = Context.Request.Path.Value ?? "/";
+    string Current(string prefix) => (prefix == "/" ? path == "/" : path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) ? "current" : "";
+}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <title>@(ViewData["Title"] is string title ? title + " · " : "")Penrill Server</title>
+    <link rel="stylesheet" href="/penrill.css" asp-append-version="true">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+<header class="bar">
+    <a class="brand" href="/"><img src="/favicon.svg" alt="" width="20" height="20"> Penrill Server</a>
+    @if (signedIn)
+    {
+        <nav>
+            <a class="@Current("/")" href="/">Connect</a>
+            <a class="@Current("/account")" href="/account">Account</a>
+            @if (admin)
+            {
+                <a class="@Current("/admin")" href="/admin">Admin</a>
+            }
+            <form method="post" action="/logout"><button class="link" type="submit">Sign out</button></form>
+        </nav>
+    }
+</header>
+<main class="page">
+    @if (TempData["Notice"] is string notice)
+    {
+        <p class="notice" role="status">@notice</p>
+    }
+    @RenderBody()
+</main>
+</body>
+</html>
