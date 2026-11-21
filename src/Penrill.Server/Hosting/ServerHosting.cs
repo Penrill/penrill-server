@@ -18,6 +18,13 @@ public static class ServerHosting
     /// </summary>
     public static WebApplicationBuilder AddPenrillServer(this WebApplicationBuilder builder)
     {
+        if (!Directory.Exists(Path.Combine(builder.Environment.ContentRootPath, "wwwroot")) &&
+            Path.Combine(AppContext.BaseDirectory, "wwwroot") is var bundledRoot &&
+            Directory.Exists(bundledRoot))
+        {
+            builder.Environment.WebRootPath = bundledRoot;
+            builder.Environment.WebRootFileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(bundledRoot);
+        }
         var configuration = builder.Configuration;
         var dataDirectory = configuration["PENRILL_DATA_DIR"] is { Length: > 0 } directory
             ? directory

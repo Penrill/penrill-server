@@ -1,82 +1,207 @@
 # Penrill Server
 
-Keeps Penrill boards in sync across your devices and lets you share them, on your own hardware.
-Licensed under FSL-1.1-MIT. Design: `docs/CONNECT.md` in the editor repository; wire protocol: `docs/PROTOCOL.md`.
+Self-hosted board synchronization and sharing server for [Penrill](https://penrill.com). Keeps your boards in sync across devices and lets you collaborate with your team or classroom on your own hardware (such as a Raspberry Pi or home/school server).
 
-## Install
+- **License:** [FSL-1.1-MIT](LICENSE)
+- **Specs:** `docs/CONNECT.md` (in the editor repository) · [Wire Protocol](docs/PROTOCOL.md)
 
-On Debian, Ubuntu or Raspberry Pi OS (64-bit, amd64 or arm64):
+---
+
+## Quick Start
+
+Penrill Server runs on **64-bit Linux** (`arm64` for Raspberry Pi 3/4/5 and `amd64` for x86_64 servers/PCs), including **Raspberry Pi OS (64-bit)**, **Debian**, and **Ubuntu**.
+
+### Option 1: Install via APT (Recommended for Raspberry Pi OS, Debian & Ubuntu)
+
+Install and configure the official APT repository in one step:
 
 ```sh
+curl -fsSL https://penrill.github.io/penrill-server/install.sh | sudo sh
+```
+
+Or add the APT repository manually:
+
+```sh
+sudo mkdir -p /usr/share/keyrings
+curl -fsSL https://penrill.github.io/penrill-server/penrill-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/penrill-archive-keyring.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/penrill-archive-keyring.gpg] https://penrill.github.io/penrill-server stable main" \
+  | sudo tee /etc/apt/sources.list.d/penrill.list
+sudo apt update
+sudo apt install penrill-server
+```
+
+Future updates are installed automatically alongside your system packages via `sudo apt update && sudo apt upgrade`.
+
+### Option 2: Install via Snap
+
+On any Linux distribution with `snapd` enabled (Ubuntu, Raspberry Pi OS, Debian):
+
+```sh
+sudo snap install penrill-server
+sudo penrill-server setup
+```
+
+### Option 3: Install a `.deb` Package Manually
+
+Download the `.deb` package for your architecture (`arm64` for Raspberry Pi, `amd64` for x86_64) from [GitHub Releases](https://github.com/Penrill/penrill-server/releases/latest) and install it with `apt`:
+
+```sh
+# Raspberry Pi OS / ARM64
 sudo apt install ./penrill-server_0.3.0_arm64.deb
+
+# Debian / Ubuntu x86_64
+sudo apt install ./penrill-server_0.3.0_amd64.deb
 ```
 
-The package starts the service and prints a setup link with a QR code. Open it in a browser on any
-device in the same network, create the owner account, and you are done. Lost the link? Run
-`sudo penrill-server setup`.
+---
 
-The browser warns about the certificate once: the server makes its own. Its fingerprint is shown on
-the setup page, in Admin › Server and by `sudo penrill-server status`. Penrill itself checks it for you.
+## First-Time Setup
 
-## Connect Penrill
+1. **Open the setup link:** When the package is installed, it starts the service and prints a one-time setup link and QR code in the terminal. If you missed it, run:
+   ```sh
+   sudo penrill-server setup
+   ```
+2. **Claim the server:** Open the link (or scan the QR code) in a browser on any device connected to the same local network, name your server, and create the **owner** account.
+3. **Verify the TLS certificate:** Because the server generates its own self-signed TLS certificate for local network encryption, your browser will show a one-time certificate warning. You can verify the certificate's short fingerprint (e.g. `3F9A-12C4-77B0`) on the setup page, in **Admin › Server**, or by running `sudo penrill-server status`. The Penrill app pins and verifies this certificate automatically.
 
-In Penrill, open Sync › Your server and enter the address the server's home page shows. Servers on
-the same network are listed there by themselves. Penrill then asks you to allow it in the browser,
-and boards start syncing. No password is typed into Penrill. On a tablet, scan the QR code on the
-server's home page: penrill.com/connect offers the app or Penrill in the browser. The server's
-address stays in the link's fragment, so it never reaches penrill.com.
+---
 
-## Add people
+## Connecting Penrill
 
-Registration is by invite only. Create an invite link in Admin › People, or:
+- **Desktop or Web App:** In Penrill, open **Sync › Your server**. Servers on the same local network appear automatically via mDNS/Avahi (`_penrill._tcp`), or you can enter the address shown on your server's home page. Penrill opens your browser to approve the device—no password is typed into the editor.
+- **Tablet or Phone:** Scan the QR code shown on your server's home page (or run `sudo penrill-server link`). The link opens `penrill.com/connect`, which launches the installed Penrill app or opens Penrill in the browser. Your server's address and certificate pin stay in the URL fragment (`#server=...`), so they are never sent to `penrill.com`.
+
+---
+
+## Inviting People & Managing Accounts
+
+Registration is **invite-only** by default.
+
+### Creating Invites
+
+Create an invite link and QR code in the web interface under **Admin › People**, or from the terminal:
 
 ```sh
-sudo penrill-server invite            # one person, valid 7 days
-sudo penrill-server invite --uses 25  # a class
+# Single-use invite, valid for 7 days
+sudo penrill-server invite
+
+# Classroom or team invite (25 uses, valid for 7 days)
+sudo penrill-server invite --uses 25
+
+# Administrator invite, valid for 14 days
+sudo penrill-server invite --admin --days 14
 ```
 
-Forgotten passwords: Admin › People › Reset password, or `sudo penrill-server reset-password NAME`,
-gives a one-hour link. Boards from server versions before accounts can be given an owner in Admin › Boards.
+### Password Resets & Legacy Boards
 
-## Command line
+- **Forgotten password:** Generate a one-hour password reset link in **Admin › People › Reset password**, or run:
+  ```sh
+  sudo penrill-server reset-password USERNAME
+  ```
+- **Pre-account boards:** Boards created on older server versions before accounts were introduced can be assigned an owner in **Admin › Boards**.
 
-```
-penrill-server status            address, certificate, users, boards
-penrill-server setup             new setup link while there is no owner
-penrill-server link              address, connect link and QR code for Penrill
-penrill-server invite            invite link (--admin, --uses N, --days N)
-penrill-server reset-password U  password reset link
-penrill-server users | devices   list (devices --revoke ID)
-penrill-server disable | enable U
-penrill-server rename NAME
-penrill-server backup FILE       all boards, images and accounts in one zip
-```
+---
 
-The commands talk to the running service over `/run/penrill-server/admin.sock`, so run them with sudo.
+## Command-Line Interface
 
-## Service
+All CLI commands communicate with the running server over its local Unix admin socket, so run them with `sudo`:
 
-Boards live in `/var/lib/penrill-server` and survive upgrades. Logs: `journalctl -u penrill-server`.
-The service listens on port 5081 with TLS on every interface and is announced on the network as
-`_penrill._tcp` through Avahi. For a web editor on another origin, set `PENRILL_EDITOR_ORIGINS`
-(comma separated) in a systemd override.
+| Command | Description |
+| :--- | :--- |
+| `sudo penrill-server status` | Show server name, version, address, TLS fingerprint, and user/board/device counts |
+| `sudo penrill-server setup` | Print a new one-time setup link and QR code (while the server has no owner) |
+| `sudo penrill-server link` | Print the server address, Penrill connect link, and QR code |
+| `sudo penrill-server invite` | Create an invite link (`--admin`, `--uses N`, `--days N`) |
+| `sudo penrill-server reset-password USER` | Generate a one-hour password reset link for `USER` |
+| `sudo penrill-server users` | List all accounts, roles, and statuses |
+| `sudo penrill-server devices` | List linked devices, or revoke one with `--revoke ID` |
+| `sudo penrill-server disable USER` | Disable an account and sign it out everywhere |
+| `sudo penrill-server enable USER` | Re-enable a disabled account |
+| `sudo penrill-server rename NAME` | Change the server name displayed in Penrill editors |
+| `sudo penrill-server backup [FILE]` | Export all boards, images, and accounts into a single `.zip` archive |
+
+---
+
+## Service & Configuration
+
+By default, the installed service listens on port **`5081`** with TLS on all network interfaces (`PENRILL_ADDRESS_MODE=lan`) and announces itself on the LAN as `_penrill._tcp` via Avahi.
+
+### Paths & Logs
+
+| Installation | Data Directory (persists across upgrades) | Admin Socket | Service Logs |
+| :--- | :--- | :--- | :--- |
+| **APT / `.deb`** | `/var/lib/penrill-server` | `/run/penrill-server/admin.sock` | `journalctl -u penrill-server -f` |
+| **Snap** | `/var/snap/penrill-server/common` | `/var/snap/penrill-server/common/admin.sock` | `sudo snap logs -f penrill-server` |
+
+### Configuration Options
+
+| Environment Variable | Snap Key (`snap set`) | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `PENRILL_PORT` | `port` | `5081` | TCP port the server listens on |
+| `PENRILL_ADDRESS_MODE` | `address-mode` | `lan` (`local` in dev) | `lan` enables HTTPS on all interfaces; `local` binds HTTP on loopback (e.g. behind a reverse proxy) |
+| `PENRILL_EDITOR_ORIGINS` | `editor-origins` | *(none)* | Comma-separated extra CORS origins allowed to connect (for self-hosted web editors) |
+| `PENRILL_OPEN_REGISTRATION` | `open-registration` | `false` | Set to `true` to allow open registration without invite links |
+| `PENRILL_DATA_DIR` | *(managed by snap)* | `/var/lib/penrill-server` | Directory where `boards.db`, assets, and TLS keys are stored |
+| `PENRILL_CONNECT_PAGE` | — | `https://penrill.com/connect` | Base URL used when generating device connect links |
+
+- **On APT / systemd:** Run `sudo systemctl edit penrill-server` and add `Environment="PENRILL_EDITOR_ORIGINS=https://draw.example.com"` under `[Service]`, then `sudo systemctl restart penrill-server`.
+- **On Snap:** Run `sudo snap set penrill-server port=5081` or `sudo snap set penrill-server editor-origins="https://draw.example.com"`.
+
+---
+
+## Packaging & Releases
+
+### Local Package Builds
+
+- **Debian packages (`.deb` for `amd64` and `arm64`):**
+  ```sh
+  sh packaging/build-deb.sh [VERSION]
+  ```
+  Requires the .NET 10 SDK and `dpkg-deb` (or Python 3 when cross-building on macOS). Outputs packages to `dist/`.
+- **APT repository:**
+  ```sh
+  sh packaging/build-apt-repo.sh dist dist/apt-repo
+  ```
+- **Snap package (`.snap`):**
+  ```sh
+  snapcraft pack
+  ```
+
+### Automated Releases (GitHub Actions)
+
+Pushing a tag matching `v*` (e.g. `git tag v0.3.0 && git push origin v0.3.0`) or running the **Release Packages (APT & Snap)** workflow manually in GitHub Actions will:
+
+1. Run the test suite.
+2. Build self-contained `.deb` and `.snap` packages for both `arm64` (Raspberry Pi) and `amd64`.
+3. Publish a GitHub Release with all `.deb`, `.snap`, and `SHA256SUMS` artifacts.
+4. Build and deploy the APT repository to GitHub Pages.
+5. Publish the `.snap` packages to the Snap Store if `SNAPCRAFT_STORE_CREDENTIALS` is configured in repository secrets.
+
+Optional repository secrets:
+- `GPG_PRIVATE_KEY` (and `GPG_PASSPHRASE` if encrypted): Signs the APT repository (`InRelease`, `Release.gpg`, and `penrill-archive-keyring.gpg`).
+- `SNAPCRAFT_STORE_CREDENTIALS`: Exported via `snapcraft export-login` to publish builds to the Snap Store.
+
+---
 
 ## Development
 
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
+
 ```sh
-dotnet run --project src/Penrill.Server   # http://127.0.0.1:5081, data in src/Penrill.Server/data
+# Run the server locally on http://127.0.0.1:5081 (SQLite data in src/Penrill.Server/data)
+dotnet run --project src/Penrill.Server
+
+# Run the test suite
 dotnet test
 ```
 
-The server's web pages (setup, sign-in, devices, administration) are a React app that lives in the
-Penrill repository under `apps/server` and talks to the JSON API in `src/Penrill.Server/Web`. Its
-build is committed in `src/Penrill.Server/wwwroot`, so the server builds and ships without Node. To
-change the pages, check out Penrill next to this repository and run `npm run dev:server-ui` there
-(http://localhost:5175, with this server running) and `npm run build:server-ui` to update `wwwroot`.
+### Web UI (`wwwroot`)
 
-`PENRILL_CONNECT_PAGE` sends connect links to a local web editor (`http://localhost:5174/app/`)
-instead of penrill.com/connect. `PENRILL_ADDRESS_MODE=lan` switches to the installed behaviour (TLS on all interfaces, port from
-`PENRILL_PORT`). `PENRILL_OPEN_REGISTRATION=true` allows anyone to register, as Penrill Cloud does.
+The server's web pages (setup, sign-in, device approval, account, and administration) are a React single-page app located in the main Penrill repository under `apps/server`, talking to the JSON API in `src/Penrill.Server/Web`.
 
-Packages: `sh packaging/build-deb.sh [VERSION]` on Debian or Ubuntu with the .NET 10 SDK and dpkg-dev
-builds amd64 and arm64 into dist/.
+Its production build is committed to `src/Penrill.Server/wwwroot`, so this repository builds and ships without requiring Node.js. To develop the web UI:
+
+1. Check out the `penrill` repository next to `penrill-server`.
+2. Start `penrill-server` (`dotnet run --project src/Penrill.Server`).
+3. In the `penrill` repository, run `npm run dev:server-ui` (opens on `http://localhost:5175`), and `npm run build:server-ui` to update `src/Penrill.Server/wwwroot`.

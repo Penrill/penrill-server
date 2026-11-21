@@ -1,0 +1,76 @@
+name: penrill-server
+base: core24
+version: '0.3.0'
+summary: Board synchronization and sharing server for Penrill
+description: |
+  Keeps Penrill boards in sync across your devices and lets you share them,
+  on your own hardware. After installing, run `sudo penrill-server setup`
+  and open the printed link in a browser on the same network to create the
+  owner account.
+
+grade: stable
+confinement: strict
+
+platforms:
+  amd64:
+    build-on: [amd64]
+    build-for: [amd64]
+  arm64:
+    build-on: [arm64]
+    build-for: [arm64]
+
+environment:
+  PENRILL_DATA_DIR: $SNAP_COMMON
+  PENRILL_ADMIN_SOCKET: $SNAP_COMMON/admin.sock
+  PENRILL_ADDRESS_MODE: lan
+  DOTNET_SYSTEM_GLOBALIZATION_INVARIANT: "1"
+
+apps:
+  daemon:
+    command: bin/penrill-daemon
+    daemon: simple
+    restart-condition: on-failure
+    plugs:
+      - network
+      - network-bind
+  penrill-server:
+    command: lib/penrill-server/Penrill.Server
+    plugs:
+      - network
+      - home
+
+hooks:
+  configure:
+    plugs:
+      - network
+
+parts:
+  penrill-server:
+    plugin: nil
+    source: .
+    build-packages:
+      - curl
+      - ca-certificates
+    stage-packages:
+      - libgcc-s1
+      - libstdc++6
+      - libssl3t64
+      - zlib1g
+    override-build: |
+      craftctl default
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        amd64) rid=linux-x64 ;;
+        arm64) rid=linux-arm64 ;;
+        *) echo "Unsupported architecture: $CRAFT_ARCH_BUILD_FOR" >&2; exit 1 ;;
+      esac
+      if ! command -v dotnet >/dev/null 2>&1; then
+        curl -fsSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --install-dir "$CRAFT_PART_BUILD/.dotnet"
+        export PATH="$CRAFT_PART_BUILD/.dotnet:$PATH"
+      fi
+      export DOTNET_CLI_TELEMETRY_OPTOUT=1
+      export DOTNET_NOLOGO=1
+      dotnet publish src/Penrill.Server -c Release -r "$rid" --self-contained true \
+        -p:DebugType=None -p:InvariantGlobalization=true -p:Version="$CRAFT_PROJECT_VERSION" \
+        -o "$CRAFT_PART_INSTALL/lib/penrill-server"
+      install -d "$CRAFT_PART_INSTALL/bin"
+      install -m 755 snap/local/penrill-daemon "$CRAFT_PART_INSTALL/bin/penrill-daemon"

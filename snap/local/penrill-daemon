@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+if command -v snapctl >/dev/null 2>&1; then
+    port=$(snapctl get port 2>/dev/null || true)
+    origins=$(snapctl get editor-origins 2>/dev/null || true)
+    open_reg=$(snapctl get open-registration 2>/dev/null || true)
+    address_mode=$(snapctl get address-mode 2>/dev/null || true)
+    [ -n "$port" ] && export PENRILL_PORT="$port"
+    [ -n "$origins" ] && export PENRILL_EDITOR_ORIGINS="$origins"
+    [ -n "$open_reg" ] && export PENRILL_OPEN_REGISTRATION="$open_reg"
+    [ -n "$address_mode" ] && export PENRILL_ADDRESS_MODE="$address_mode"
+fi
+cd "$SNAP/lib/penrill-server"
+exec "$SNAP/lib/penrill-server/Penrill.Server" "$@"

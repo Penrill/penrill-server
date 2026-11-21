@@ -27,6 +27,7 @@ public static class CommandLine
             return verb is "help" or "--help" ? 0 : 2;
         }
         var socket = Environment.GetEnvironmentVariable("PENRILL_ADMIN_SOCKET") is { Length: > 0 } configured ? configured
+            : Environment.GetEnvironmentVariable("SNAP_COMMON") is { Length: > 0 } snapCommon ? Path.Combine(snapCommon, "admin.sock")
             : File.Exists(DefaultSocket) ? DefaultSocket
             : Path.Combine(AppContext.BaseDirectory, "data", "admin.sock");
         using var http = new HttpClient(new SocketsHttpHandler
@@ -45,9 +46,10 @@ public static class CommandLine
         }
         catch (HttpRequestException error) when (error.InnerException is SocketException socketError)
         {
+            var start = Environment.GetEnvironmentVariable("SNAP") is not null ? "sudo snap start penrill-server" : "sudo systemctl start penrill-server";
             Console.Error.WriteLine(socketError.SocketErrorCode is SocketError.AccessDenied
                 ? "Permission denied. Run it with sudo."
-                : $"Penrill Server is not running here (no socket at {socket}). Start it with: sudo systemctl start penrill-server");
+                : $"Penrill Server is not running here (no socket at {socket}). Start it with: {start}");
             return 1;
         }
         if (verb == "backup")
