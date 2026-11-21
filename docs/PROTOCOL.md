@@ -90,9 +90,10 @@ All routes take `Authorization: Bearer <token>` except register and login.
 | `GET /api/boards/{id}/people` | owner only: names of the people let in to draw on the board (404 for others) |
 | `POST /api/boards/{id}/people` | owner only: `{name}` lets that person open and draw on the board (204; 404 when nobody has that name) |
 | `DELETE /api/boards/{id}/people/{name}` | owner only: takes that person out again (204) |
-| `GET /api/boards/{id}/link` | owner only: the board's draw link token, made on first use (404 for others) |
+| `GET /api/boards/{id}/link` | owner only: `{token}` of the board's draw link, `null` while it is off (404 for others) |
+| `POST /api/boards/{id}/link` | owner only: turns the draw link on (the same token while it stays on) and answers `{token}` |
 | `DELETE /api/boards/{id}/link` | owner only: turns the link off and takes out everyone who came in through it (204) |
-| `POST /api/join` | no sign-in: `{token, name}` makes a guest account that can reach only that board; answers `{name, token, board}` (404 for an unknown or turned-off link) |
+| `POST /api/join` | no sign-in: `{token, name}` makes a guest account that can reach only that board; answers `{name, token, board}` (404 for an unknown or turned-off link). Signed in, the caller's own account gets the board instead and `token` is `null` |
 | `PUT /api/boards/{id}/assets/{sha256}` | upload image bytes; the server checks the hash |
 | `GET /api/boards/{id}/assets/{sha256}` | download image bytes (immutable) |
 

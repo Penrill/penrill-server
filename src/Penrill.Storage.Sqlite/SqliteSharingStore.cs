@@ -95,14 +95,14 @@ internal sealed class SqliteSharingStore(SqliteDatabase database) : ISharingStor
             """, ("board", board), ("user", owner), ("name", name.Trim().ToLowerInvariant())) == 1);
     }
 
-    public Task<string?> BoardLink(string owner, string board, CancellationToken cancel)
+    public Task<BoardLinkState?> BoardLink(string owner, string board, bool create, CancellationToken cancel)
     {
         using var db = database.Open();
         if (db.Scalar("SELECT 1 FROM owners WHERE board=$board AND user=$user", ("board", board), ("user", owner)) is null)
-            return Task.FromResult<string?>(null);
-        db.Execute("INSERT OR IGNORE INTO board_links(board, token) VALUES($board, $token)",
+            return Task.FromResult<BoardLinkState?>(null);
+        if (create) db.Execute("INSERT OR IGNORE INTO board_links(board, token) VALUES($board, $token)",
             ("board", board), ("token", Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16))));
-        return Task.FromResult(db.Scalar("SELECT token FROM board_links WHERE board=$board", ("board", board)) as string);
+        return Task.FromResult<BoardLinkState?>(new(db.Scalar("SELECT token FROM board_links WHERE board=$board", ("board", board)) as string));
     }
 
     public Task<bool> RevokeBoardLink(string owner, string board, CancellationToken cancel)

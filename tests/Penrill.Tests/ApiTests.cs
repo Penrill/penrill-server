@@ -145,8 +145,11 @@ public sealed class ApiTests : IDisposable
         Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/join", new { token = "nope", name = "Kid" })).StatusCode);
         var (bob, _) = await SignUp("bob");
         Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync(link)).StatusCode);
-        var token = (string)(await ann.GetFromJsonAsync<JsonObject>(link))!["token"]!;
+        Assert.Null((await ann.GetFromJsonAsync<JsonObject>(link))!["token"]);
+        var token = (string)(await (await ann.PostAsync(link, null)).Content.ReadFromJsonAsync<JsonObject>())!["token"]!;
+        Assert.Equal(token, (string)(await (await ann.PostAsync(link, null)).Content.ReadFromJsonAsync<JsonObject>())!["token"]!);
         Assert.Equal(token, (string)(await ann.GetFromJsonAsync<JsonObject>(link))!["token"]!);
+        Assert.Equal(HttpStatusCode.BadRequest, (await anonymous.PostAsJsonAsync("/api/join", new { token })).StatusCode);
 
         var joined = (await (await anonymous.PostAsJsonAsync("/api/join", new { token, name = "Kid Ó" })).Content.ReadFromJsonAsync<JsonObject>())!;
         Assert.StartsWith("kid-", (string)joined["name"]!);
@@ -155,9 +158,18 @@ public sealed class ApiTests : IDisposable
         kid.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", (string)joined["token"]!);
         Assert.Equal(HttpStatusCode.OK, (await kid.GetAsync($"/api/boards/{Board}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await kid.GetAsync(link)).StatusCode);
+        // Opening the link again on the same device keeps the account it already has.
+        var again = (await (await kid.PostAsJsonAsync("/api/join", new { token, name = "Kid" })).Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.Equal((string)joined["name"]!, (string)again["name"]!);
+        Assert.Null(again["token"]);
+        // So does bob, who has a real account: he just gets the board.
+        Assert.Equal("bob", (string)(await (await bob.PostAsJsonAsync("/api/join", new { token })).Content.ReadFromJsonAsync<JsonObject>())!["name"]!);
+        Assert.Equal(HttpStatusCode.OK, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
 
         Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync(link)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await kid.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Null((await ann.GetFromJsonAsync<JsonObject>(link))!["token"]);
         Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/join", new { token, name = "Kid" })).StatusCode);
     }
 

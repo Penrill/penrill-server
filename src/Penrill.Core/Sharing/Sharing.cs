@@ -27,8 +27,11 @@ public interface ISharingStore
     Task<IReadOnlyList<string>?> People(string owner, string board, CancellationToken cancel);
     /// <summary>Lets a person draw on the owner's board. False when the board isn't the owner's or nobody has that name.</summary>
     Task<bool> AddPerson(string owner, string board, string name, CancellationToken cancel);
-    /// <summary>The board's draw link token, made on first use. Null when the board isn't the caller's.</summary>
-    Task<string?> BoardLink(string owner, string board, CancellationToken cancel);
+    /// <summary>
+    /// The board's draw link, made now when <paramref name="create"/> is set. Null when the board isn't
+    /// the caller's; a state without a token while the link is off.
+    /// </summary>
+    Task<BoardLinkState?> BoardLink(string owner, string board, bool create, CancellationToken cancel);
     /// <summary>Turns the draw link off and takes out everyone who came in through it.</summary>
     Task<bool> RevokeBoardLink(string owner, string board, CancellationToken cancel);
     /// <summary>The board a draw link opens; null when the link is unknown or turned off.</summary>
@@ -74,3 +77,6 @@ public static class TemplateFile
         }
     }
 }
+
+/// <summary>A board's draw link: its token, or null while the link is off.</summary>
+public sealed record BoardLinkState(string? Token);

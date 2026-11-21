@@ -41,15 +41,25 @@ internal static class SharingEndpoints
             : await sharing.RemovePerson(user.UserName(), id, name, cancel) ? Results.NoContent() : Results.NotFound());
         api.MapGet("/boards/{id}/link", async (string id, ClaimsPrincipal user, ISharingStore sharing, CancellationToken cancel) =>
             !BoardLimits.IsBoardId(id) ? Results.BadRequest()
-            : await sharing.BoardLink(user.UserName(), id, cancel) is { } token ? Results.Ok(new { token }) : Results.NotFound());
+            : await sharing.BoardLink(user.UserName(), id, false, cancel) is { } link ? Results.Ok(new { token = link.Token }) : Results.NotFound());
+        api.MapPost("/boards/{id}/link", async (string id, ClaimsPrincipal user, ISharingStore sharing, CancellationToken cancel) =>
+            !BoardLimits.IsBoardId(id) ? Results.BadRequest()
+            : await sharing.BoardLink(user.UserName(), id, true, cancel) is { } link ? Results.Ok(new { token = link.Token }) : Results.NotFound());
         api.MapDelete("/boards/{id}/link", async (string id, ClaimsPrincipal user, ISharingStore sharing, CancellationToken cancel) =>
             !BoardLimits.IsBoardId(id) ? Results.BadRequest()
             : await sharing.RevokeBoardLink(user.UserName(), id, cancel) ? Results.NoContent() : Results.NotFound());
         // Anyone with the link may draw on the board: they get an account of their own that can reach nothing else.
-        api.MapPost("/join", async (Join input, ISharingStore sharing, AccountService accounts, CancellationToken cancel) =>
+        // A device that already has an account here (from an earlier link, or a real one) keeps it and just gets the board too.
+        api.MapPost("/join", async (Join input, ClaimsPrincipal user, ISharingStore sharing, AccountService accounts, CancellationToken cancel) =>
         {
             if (string.IsNullOrWhiteSpace(input.Token) || input.Token.Length > 64
                 || await sharing.LinkedBoard(input.Token, cancel) is not { } board) return Results.NotFound();
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                await sharing.AddGuest(input.Token, user.UserName(), cancel);
+                return Results.Ok(new { name = user.UserName(), token = (string?)null, board });
+            }
+            if (string.IsNullOrWhiteSpace(input.Name)) return Results.BadRequest();
             var label = new string((input.Name ?? "").ToLowerInvariant().Where(c => char.IsAsciiLetterOrDigit(c)).Take(20).ToArray());
             if (label.Length < 2) label = "guest";
             for (var attempt = 0; attempt < 5; attempt++)
