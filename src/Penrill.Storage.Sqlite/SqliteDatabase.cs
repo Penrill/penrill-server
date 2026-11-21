@@ -77,5 +77,6 @@ internal static class SqlAccess
     public const string BoardsOf = """
         SELECT board FROM owners WHERE user=$user
         UNION SELECT folder_boards.board FROM folder_boards JOIN members ON members.folder=folder_boards.folder WHERE members.user=$user
+        UNION SELECT board FROM board_people WHERE user=$user
         """;
 }

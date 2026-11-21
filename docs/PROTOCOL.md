@@ -87,6 +87,9 @@ All routes take `Authorization: Bearer <token>` except register and login.
 | `GET /api/boards/{id}/changes?after=N` | `{ seq, changes }`, or 410 when the client must take a snapshot |
 | `POST /api/boards/{id}/changes` | submit one change, answers `{ seq }` |
 | `DELETE /api/boards/{id}` | owner only: delete the board, its history and folder shares (204; 403 for others). Live connections close with 4404, and devices keep their copy as a local board |
+| `GET /api/boards/{id}/people` | owner only: names of the people let in to draw on the board (404 for others) |
+| `POST /api/boards/{id}/people` | owner only: `{name}` lets that person open and draw on the board (204; 404 when nobody has that name) |
+| `DELETE /api/boards/{id}/people/{name}` | owner only: takes that person out again (204) |
 | `PUT /api/boards/{id}/assets/{sha256}` | upload image bytes; the server checks the hash |
 | `GET /api/boards/{id}/assets/{sha256}` | download image bytes (immutable) |
 

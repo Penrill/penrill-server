@@ -28,6 +28,15 @@ internal static class SharingEndpoints
         api.MapPost("/share-board", async (FolderChange input, ClaimsPrincipal user, ISharingStore sharing, CancellationToken cancel) =>
             input.Folder is null || input.Board is null || !BoardLimits.IsBoardId(input.Board) ? Results.BadRequest()
             : await sharing.ShareBoard(user.UserName(), input.Folder, input.Board, cancel) ? Results.NoContent() : Results.Conflict());
+        api.MapGet("/boards/{id}/people", async (string id, ClaimsPrincipal user, ISharingStore sharing, CancellationToken cancel) =>
+            !BoardLimits.IsBoardId(id) ? Results.BadRequest()
+            : await sharing.People(user.UserName(), id, cancel) is { } people ? Results.Ok(people) : Results.NotFound());
+        api.MapPost("/boards/{id}/people", async (string id, FolderChange input, ClaimsPrincipal user, ISharingStore sharing, CancellationToken cancel) =>
+            !BoardLimits.IsBoardId(id) || !TemplateFile.IsLabel(input.Name) ? Results.BadRequest()
+            : await sharing.AddPerson(user.UserName(), id, input.Name!, cancel) ? Results.NoContent() : Results.NotFound());
+        api.MapDelete("/boards/{id}/people/{name}", async (string id, string name, ClaimsPrincipal user, ISharingStore sharing, CancellationToken cancel) =>
+            !BoardLimits.IsBoardId(id) ? Results.BadRequest()
+            : await sharing.RemovePerson(user.UserName(), id, name, cancel) ? Results.NoContent() : Results.NotFound());
         api.MapPost("/templates", async (string name, string? folder, HttpRequest request, ClaimsPrincipal user, ITemplateStore templates, CancellationToken cancel) =>
             await TemplateBody(name, request, cancel) is not { } data ? Results.BadRequest()
             : await templates.Publish(user.UserName(), folder ?? "", name, data, cancel) is { } info ? Results.Ok(info) : Results.NotFound());

@@ -23,6 +23,11 @@ public interface ISharingStore
     Task CreateFolder(string owner, string name, CancellationToken cancel);
     Task<bool> AddMember(string owner, string folder, string member, CancellationToken cancel);
     Task<bool> ShareBoard(string user, string folder, string board, CancellationToken cancel);
+    /// <summary>People the board's owner let in by name. Null when the board isn't the caller's.</summary>
+    Task<IReadOnlyList<string>?> People(string owner, string board, CancellationToken cancel);
+    /// <summary>Lets a person draw on the owner's board. False when the board isn't the owner's or nobody has that name.</summary>
+    Task<bool> AddPerson(string owner, string board, string name, CancellationToken cancel);
+    Task<bool> RemovePerson(string owner, string board, string name, CancellationToken cancel);
 }
 
 public interface ITemplateStore

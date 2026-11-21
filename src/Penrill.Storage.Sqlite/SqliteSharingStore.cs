@@ -67,6 +67,34 @@ internal sealed class SqliteSharingStore(SqliteDatabase database) : ISharingStor
         return Task.FromResult(shared == 1);
     }
 
+    public Task<IReadOnlyList<string>?> People(string owner, string board, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        if (db.Scalar("SELECT 1 FROM owners WHERE board=$board AND user=$user", ("board", board), ("user", owner)) is null)
+            return Task.FromResult<IReadOnlyList<string>?>(null);
+        return Task.FromResult<IReadOnlyList<string>?>(db.Rows("SELECT user FROM board_people WHERE board=$board ORDER BY user", row => row.GetString(0), ("board", board)));
+    }
+
+    public Task<bool> AddPerson(string owner, string board, string name, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        db.Execute("""
+            INSERT OR IGNORE INTO board_people(board, user)
+            SELECT owners.board, accounts.name FROM owners, accounts
+            WHERE owners.board=$board AND owners.user=$user AND accounts.name=$name AND accounts.name<>$user
+            """, ("board", board), ("user", owner), ("name", name.Trim().ToLowerInvariant()));
+        return Task.FromResult(db.Scalar("SELECT 1 FROM board_people WHERE board=$board AND user=$name",
+            ("board", board), ("name", name.Trim().ToLowerInvariant())) is not null);
+    }
+
+    public Task<bool> RemovePerson(string owner, string board, string name, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        return Task.FromResult(db.Execute("""
+            DELETE FROM board_people WHERE board=$board AND user=$name AND $board IN (SELECT board FROM owners WHERE user=$user)
+            """, ("board", board), ("user", owner), ("name", name.Trim().ToLowerInvariant())) == 1);
+    }
+
     private const string TemplateColumns = "id, name, folder, author, updated";
 
     private static TemplateInfo ReadTemplate(SqliteDataReader row) =>

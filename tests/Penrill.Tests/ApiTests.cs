@@ -110,6 +110,31 @@ public sealed class ApiTests : IDisposable
     }
 
     [Fact]
+    public async Task OwnersLetPeopleInByNameAndTakeThemOutAgain()
+    {
+        var (ann, _) = await SignUp("ann");
+        var (bob, _) = await SignUp("bob");
+        await CreateBoard(ann);
+        var people = $"/api/boards/{Board}/people";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.PostAsJsonAsync(people, new { name = "nobody" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.PostAsJsonAsync(people, new { name = "bob" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.PostAsJsonAsync(people, new { name = "Bob" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.PostAsJsonAsync(people, new { name = "bob" })).StatusCode);
+        Assert.Equal(["bob"], (await ann.GetFromJsonAsync<string[]>(people))!);
+
+        Assert.Equal(HttpStatusCode.OK, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Single((await bob.GetFromJsonAsync<JsonArray>("/api/boards"))!);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync(people)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.DeleteAsync($"{people}/bob")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync($"{people}/bob")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await bob.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Empty((await ann.GetFromJsonAsync<string[]>(people))!);
+    }
+
+    [Fact]
     public async Task CreatingABoardTwiceIsSafe()
     {
         var (ann, _) = await SignUp("ann");
