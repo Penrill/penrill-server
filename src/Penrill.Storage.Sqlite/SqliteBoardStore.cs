@@ -87,7 +87,7 @@ internal sealed class SqliteBoardStore(SqliteDatabase database) : IBoardStore
         if (db.Scalar("SELECT user FROM owners WHERE board=$id", ("id", board)) is not string owner || owner != user)
             return Task.FromResult(BoardAccess.Denied);
         foreach (var table in (string[])["changes", "assets"]) db.Execute($"DELETE FROM {table} WHERE board=$id", ("id", board));
-        foreach (var table in (string[])["owners", "folder_boards", "board_people"]) db.Execute($"DELETE FROM {table} WHERE board=$id", ("id", board));
+        foreach (var table in (string[])["owners", "folder_boards", "board_people", "board_links"]) db.Execute($"DELETE FROM {table} WHERE board=$id", ("id", board));
         db.Execute("DELETE FROM boards WHERE id=$id", ("id", board));
         transaction.Commit();
         return Task.FromResult(BoardAccess.Allowed);

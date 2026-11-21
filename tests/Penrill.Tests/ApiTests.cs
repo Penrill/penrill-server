@@ -135,6 +135,33 @@ public sealed class ApiTests : IDisposable
     }
 
     [Fact]
+    public async Task AnyoneWithTheLinkDrawsWithoutAnAccountUntilItIsTurnedOff()
+    {
+        var (ann, _) = await SignUp("ann");
+        await CreateBoard(ann);
+        var link = $"/api/boards/{Board}/link";
+        var anonymous = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/join", new { token = "nope", name = "Kid" })).StatusCode);
+        var (bob, _) = await SignUp("bob");
+        Assert.Equal(HttpStatusCode.NotFound, (await bob.GetAsync(link)).StatusCode);
+        var token = (string)(await ann.GetFromJsonAsync<JsonObject>(link))!["token"]!;
+        Assert.Equal(token, (string)(await ann.GetFromJsonAsync<JsonObject>(link))!["token"]!);
+
+        var joined = (await (await anonymous.PostAsJsonAsync("/api/join", new { token, name = "Kid Ó" })).Content.ReadFromJsonAsync<JsonObject>())!;
+        Assert.StartsWith("kid-", (string)joined["name"]!);
+        Assert.Equal(Board, (string)joined["board"]!);
+        var kid = factory.CreateClient();
+        kid.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", (string)joined["token"]!);
+        Assert.Equal(HttpStatusCode.OK, (await kid.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await kid.GetAsync(link)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync(link)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await kid.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await anonymous.PostAsJsonAsync("/api/join", new { token, name = "Kid" })).StatusCode);
+    }
+
+    [Fact]
     public async Task CreatingABoardTwiceIsSafe()
     {
         var (ann, _) = await SignUp("ann");

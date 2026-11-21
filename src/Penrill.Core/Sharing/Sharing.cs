@@ -27,6 +27,14 @@ public interface ISharingStore
     Task<IReadOnlyList<string>?> People(string owner, string board, CancellationToken cancel);
     /// <summary>Lets a person draw on the owner's board. False when the board isn't the owner's or nobody has that name.</summary>
     Task<bool> AddPerson(string owner, string board, string name, CancellationToken cancel);
+    /// <summary>The board's draw link token, made on first use. Null when the board isn't the caller's.</summary>
+    Task<string?> BoardLink(string owner, string board, CancellationToken cancel);
+    /// <summary>Turns the draw link off and takes out everyone who came in through it.</summary>
+    Task<bool> RevokeBoardLink(string owner, string board, CancellationToken cancel);
+    /// <summary>The board a draw link opens; null when the link is unknown or turned off.</summary>
+    Task<string?> LinkedBoard(string token, CancellationToken cancel);
+    /// <summary>Lets a guest account draw on the board its link opens.</summary>
+    Task AddGuest(string token, string user, CancellationToken cancel);
     Task<bool> RemovePerson(string owner, string board, string name, CancellationToken cancel);
 }
 

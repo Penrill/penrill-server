@@ -11,7 +11,7 @@ internal sealed partial class SqliteMigrator(SqliteDatabase database, FileAssetS
 {
     private delegate void Migration(SqliteConnection db);
 
-    private Migration[] Migrations => [CreateFirstSchema, MoveToChangeLog, AddAccessControl, AddTemplateVersions, AddBoardPeople];
+    private Migration[] Migrations => [CreateFirstSchema, MoveToChangeLog, AddAccessControl, AddTemplateVersions, AddBoardPeople, AddBoardLinks];
 
     public void Migrate()
     {
@@ -103,6 +103,13 @@ internal sealed partial class SqliteMigrator(SqliteDatabase database, FileAssetS
         db.Execute("""
             CREATE TABLE board_people(board TEXT NOT NULL, user TEXT NOT NULL, PRIMARY KEY(board, user));
             CREATE INDEX board_people_user ON board_people(user);
+            """);
+
+    /// <summary>A board's draw link lets guests in without an account; they are remembered by the link they used.</summary>
+    private static void AddBoardLinks(SqliteConnection db) =>
+        db.Execute("""
+            CREATE TABLE board_links(board TEXT PRIMARY KEY, token TEXT NOT NULL UNIQUE);
+            ALTER TABLE board_people ADD COLUMN via TEXT NOT NULL DEFAULT '';
             """);
 
     private void ImportLegacyBoard(SqliteConnection db, string id, string title, string updated, long revision, byte[] file)
