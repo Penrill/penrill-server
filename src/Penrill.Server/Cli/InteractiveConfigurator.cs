@@ -16,7 +16,10 @@ public static class InteractiveConfigurator
     {
         TerminalUi.EnsureCursorRestoredOnExit();
         var state = await FetchStateAsync(http);
-        if (state is null) return 1;
+        if (state is null)
+        {
+            return await RunOfflineRecoveryMenuAsync(http);
+        }
 
         if (state.Unclaimed)
         {
@@ -638,6 +641,7 @@ public static class InteractiveConfigurator
             [
                 new("🔄 Restart Penrill Server", "restart", isSnap ? "sudo snap restart penrill-server" : "sudo systemctl restart penrill-server"),
                 new("📜 View recent service logs", "logs", "Show the last 30 log entries"),
+                new("🔥 Factory Reset (wipe all data & start over)", "reset", "Deletes all accounts & boards and restarts fresh"),
                 new("🗑️  Uninstall Penrill Server...", "uninstall", "Remove Penrill Server from this machine"),
                 new("← Back to main menu", "back")
             ]);
@@ -664,10 +668,120 @@ public static class InteractiveConfigurator
             return false;
         }
 
+        if (action == "reset")
+        {
+            await RunFactoryResetAsync(skipConfirm: false);
+            return false;
+        }
+
         if (action == "uninstall")
             return RunUninstallInteractive();
 
         return false;
+    }
+
+    private static async Task<int> RunOfflineRecoveryMenuAsync(HttpClient http)
+    {
+        var isSnap = Environment.GetEnvironmentVariable("SNAP") is not null;
+        while (true)
+        {
+            TerminalUi.Header("Penrill Server — Service Recovery", "The background service is not responding");
+            var (selected, action) = TerminalUi.Select<string>(
+                "What would you like to do?",
+                [
+                    new("🔄 Start / Restart Penrill Server", "restart", isSnap ? "sudo snap restart penrill-server" : "sudo systemctl restart penrill-server"),
+                    new("📜 View service logs (see why it stopped)", "logs", isSnap ? "snap logs -n 40 penrill-server" : "journalctl -u penrill-server -n 40"),
+                    new("🔥 Factory Reset (wipe data & start clean)", "reset", "Clears all boards/accounts and starts a fresh server"),
+                    new("🗑️  Uninstall Penrill Server", "uninstall", "Remove Penrill Server from this machine"),
+                    new("🚪 Exit", "exit")
+                ]);
+            if (!selected || action == "exit") return 1;
+
+            if (action == "restart")
+            {
+                Console.WriteLine();
+                if (isSnap) RunProcess("snap", ["restart", "penrill-server"]);
+                else RunProcess("systemctl", ["restart", "penrill-server"]);
+                await WaitForSocketAsync();
+                if (await FetchStateAsync(http) is not null)
+                    return await RunAsync(http);
+                TerminalUi.Warn("Service still did not come up. Check the logs below.");
+            }
+            else if (action == "logs")
+            {
+                Console.WriteLine();
+                if (isSnap) RunProcess("snap", ["logs", "-n", "40", "penrill-server"]);
+                else RunProcess("journalctl", ["-u", "penrill-server", "-n", "40", "--no-pager"]);
+                TerminalUi.Pause();
+            }
+            else if (action == "reset")
+            {
+                if (await RunFactoryResetAsync(skipConfirm: false))
+                {
+                    if (await FetchStateAsync(http) is not null)
+                        return await RunAsync(http);
+                }
+            }
+            else if (action == "uninstall")
+            {
+                if (RunUninstallInteractive()) return 0;
+            }
+        }
+    }
+
+    public static async Task<bool> RunFactoryResetAsync(bool skipConfirm = false)
+    {
+        var isSnap = Environment.GetEnvironmentVariable("SNAP") is not null;
+        var dataDir = isSnap ? "/var/snap/penrill-server/common" : "/var/lib/penrill-server";
+
+        if (!skipConfirm)
+        {
+            Console.WriteLine();
+            if (!TerminalUi.Confirm(
+                $"Factory reset Penrill Server and DELETE ALL BOARDS & ACCOUNTS in {dataDir}?",
+                yesLabel: "Yes, wipe everything and start fresh",
+                noLabel: "No, cancel"))
+                return false;
+        }
+
+        Console.WriteLine();
+        TerminalUi.Info("Stopping Penrill Server...");
+        if (isSnap) RunProcess("snap", ["stop", "penrill-server"]);
+        else RunProcess("systemctl", ["stop", "penrill-server"]);
+
+        try
+        {
+            if (Directory.Exists(dataDir))
+            {
+                foreach (var entry in Directory.EnumerateFileSystemEntries(dataDir))
+                {
+                    if (Directory.Exists(entry)) Directory.Delete(entry, recursive: true);
+                    else File.Delete(entry);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            TerminalUi.Error($"Could not clear {dataDir}: {ex.Message}");
+            return false;
+        }
+
+        TerminalUi.Info("Starting fresh Penrill Server...");
+        if (isSnap) RunProcess("snap", ["start", "penrill-server"]);
+        else RunProcess("systemctl", ["start", "penrill-server"]);
+
+        await WaitForSocketAsync();
+        TerminalUi.Success("Factory reset complete! Server is clean and ready for setup.");
+        return true;
+    }
+
+    private static async Task WaitForSocketAsync()
+    {
+        var socket = Environment.GetEnvironmentVariable("SNAP_COMMON") is { Length: > 0 } sc
+            ? Path.Combine(sc, "admin.sock")
+            : CommandLine.DefaultSocket;
+        for (var i = 0; i < 30 && !File.Exists(socket); i++)
+            await Task.Delay(500);
     }
 
     public static bool RunUninstallInteractive(bool? forcePurge = null, bool skipConfirm = false)

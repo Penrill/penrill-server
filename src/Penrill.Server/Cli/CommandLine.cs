@@ -16,7 +16,7 @@ public static class CommandLine
     {
         if (args.Length > 0)
             return !args[0].StartsWith('-') || args[0] is "--help" or "-h" or "--version" or "-v";
-        return TerminalUi.IsInteractive && HasInstalledSocket();
+        return TerminalUi.IsInteractive && (HasInstalledSocket() || IsInstalledPackage());
     }
 
     public static string SocketPath(IConfiguration configuration, string dataDirectory) =>
@@ -24,14 +24,17 @@ public static class CommandLine
 
     private static string ResolveClientSocket() =>
         Environment.GetEnvironmentVariable("PENRILL_ADMIN_SOCKET") is { Length: > 0 } configured ? configured
-        : Environment.GetEnvironmentVariable("SNAP_COMMON") is { Length: > 0 } snapCommon && File.Exists(Path.Combine(snapCommon, "admin.sock")) ? Path.Combine(snapCommon, "admin.sock")
-        : File.Exists(DefaultSocket) ? DefaultSocket
-        : Environment.GetEnvironmentVariable("SNAP_COMMON") is { Length: > 0 } snapFallback ? Path.Combine(snapFallback, "admin.sock")
+        : Environment.GetEnvironmentVariable("SNAP_COMMON") is { Length: > 0 } snapCommon ? Path.Combine(snapCommon, "admin.sock")
+        : File.Exists(DefaultSocket) || IsInstalledPackage() ? DefaultSocket
         : Path.Combine(AppContext.BaseDirectory, "data", "admin.sock");
 
     private static bool HasInstalledSocket() =>
         File.Exists(DefaultSocket) ||
         (Environment.GetEnvironmentVariable("SNAP_COMMON") is { Length: > 0 } snapCommon && File.Exists(Path.Combine(snapCommon, "admin.sock")));
+
+    private static bool IsInstalledPackage() =>
+        File.Exists("/usr/lib/systemd/system/penrill-server.service") ||
+        Environment.GetEnvironmentVariable("SNAP") is not null;
 
     public static async Task<int> Run(string[] args)
     {
@@ -58,6 +61,14 @@ public static class CommandLine
             bool? forcePurge = rest.Contains("--purge") ? true : rest.Contains("--keep") ? false : null;
             var skipConfirm = rest.Contains("--yes") || rest.Contains("-y");
             InteractiveConfigurator.RunUninstallInteractive(forcePurge, skipConfirm);
+            return 0;
+        }
+
+        if (verb == "factory-reset")
+        {
+            var rest = args.Length > 1 ? args[1..] : [];
+            var skipConfirm = rest.Contains("--yes") || rest.Contains("-y");
+            await InteractiveConfigurator.RunFactoryResetAsync(skipConfirm);
             return 0;
         }
 

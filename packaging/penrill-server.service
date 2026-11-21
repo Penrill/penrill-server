@@ -8,6 +8,7 @@ DynamicUser=yes
 StateDirectory=penrill-server
 RuntimeDirectory=penrill-server
 WorkingDirectory=/usr/lib/penrill-server
+Environment=HOME=/var/lib/penrill-server
 Environment=PENRILL_DATA_DIR=/var/lib/penrill-server
 Environment=PENRILL_ADDRESS_MODE=lan
 Environment=PENRILL_ADMIN_SOCKET=/run/penrill-server/admin.sock

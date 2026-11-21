@@ -79,6 +79,7 @@ public static class AdminCommands
         new("rename", "rename NAME", "Change the server name shown in editors", Rename),
         new("email", "email ADDRESS", "Set the administrator contact email", Email),
         new("backup", "backup [FILE]", "Write a backup archive of all boards and accounts", Backup),
+        new("factory-reset", "factory-reset [--yes]", "Wipe all accounts and boards and restart fresh", Status),
         new("uninstall", "uninstall [--purge] [--yes]", "Uninstall Penrill Server (--purge removes all boards and data)", Status)
     ];
 
