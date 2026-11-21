@@ -9,7 +9,7 @@ namespace Penrill.Server.Hosting;
 /// <summary>
 /// Signs people in to the server's own pages with a cookie holding a web session token. Editors never
 /// use it: they send a device token as a bearer header, and the API ignores this cookie, so a page
-/// on another site cannot ride on it. Pages are additionally protected by antiforgery tokens.
+/// on another site cannot ride on it. Requests that change something also need a header other sites cannot send (see WebEndpoints).
 /// </summary>
 public sealed class WebSessionHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory loggers, UrlEncoder encoder, AccountService accounts)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, loggers, encoder)
@@ -28,13 +28,13 @@ public sealed class WebSessionHandler(IOptionsMonitor<AuthenticationSchemeOption
 
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
-        Response.Redirect("/login?return=" + Uri.EscapeDataString(Request.Path + Request.QueryString));
+        Response.StatusCode = StatusCodes.Status401Unauthorized;
         return Task.CompletedTask;
     }
 
     protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
     {
-        Response.Redirect("/");
+        Response.StatusCode = StatusCodes.Status403Forbidden;
         return Task.CompletedTask;
     }
 

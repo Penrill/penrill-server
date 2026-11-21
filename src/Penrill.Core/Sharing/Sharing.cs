@@ -8,7 +8,11 @@ public sealed record MemberInfo(string Folder, string Name);
 
 public sealed record FolderBoard(string Folder, string Id, string Title, long Seq, DateTimeOffset Updated);
 
-public sealed record TemplateInfo(string Id, string Name, string Folder, string Author);
+/// <summary>A shared template. <c>Updated</c> (Unix milliseconds) changes whenever its author edits it, so copies can follow.</summary>
+public sealed record TemplateInfo(string Id, string Name, string Folder, string Author, long Updated);
+
+/// <summary>A template as the admin pages list it: with the folder's name instead of its id.</summary>
+public sealed record SharedTemplate(string Id, string Name, string Author, string? FolderName, DateTimeOffset Updated);
 
 public sealed record SharingCatalog(
     IReadOnlyList<FolderInfo> Folders, IReadOnlyList<MemberInfo> Members, IReadOnlyList<FolderBoard> Boards, IReadOnlyList<TemplateInfo> Templates);
@@ -23,8 +27,14 @@ public interface ISharingStore
 
 public interface ITemplateStore
 {
-    Task<bool> Publish(string author, string folder, string name, byte[] data, CancellationToken cancel);
+    /// <summary>Shares a template with everyone (<paramref name="folder"/> empty) or one folder the author is in. Null when the folder isn't theirs.</summary>
+    Task<TemplateInfo?> Publish(string author, string folder, string name, byte[] data, CancellationToken cancel);
+    /// <summary>The author edits a shared template in place: everyone who added it gets the new version.</summary>
+    Task<TemplateInfo?> Update(string author, string id, string name, byte[] data, CancellationToken cancel);
+    /// <summary>Stops sharing a template: its author may, and so may an admin.</summary>
+    Task<bool> Remove(string user, bool admin, string id, CancellationToken cancel);
     Task<byte[]?> Find(string user, string id, CancellationToken cancel);
+    Task<IReadOnlyList<SharedTemplate>> All(CancellationToken cancel);
 }
 
 public static class TemplateFile

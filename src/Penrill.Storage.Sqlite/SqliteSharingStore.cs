@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Penrill.Core.Boards;
 using Penrill.Core.Sharing;
 
@@ -29,8 +30,8 @@ internal sealed class SqliteSharingStore(SqliteDatabase database) : ISharingStor
             WHERE folder_boards.folder IN ({FoldersOf}) ORDER BY boards.title
             """,
             row => new FolderBoard(row.GetString(0), row.GetString(1), row.GetString(2), row.GetInt64(3), SqliteCommands.ParseStamp(row.GetString(4))), me);
-        var templates = db.Rows($"SELECT id, name, folder, author FROM templates WHERE folder='' OR folder IN ({FoldersOf}) ORDER BY name",
-            row => new TemplateInfo(row.GetString(0), row.GetString(1), row.GetString(2), row.GetString(3)), me);
+        var templates = db.Rows($"SELECT {TemplateColumns} FROM templates WHERE folder='' OR folder IN ({FoldersOf}) ORDER BY name",
+            ReadTemplate, me);
         return Task.FromResult(new SharingCatalog(folders, members, boards, templates));
     }
 
@@ -66,15 +67,54 @@ internal sealed class SqliteSharingStore(SqliteDatabase database) : ISharingStor
         return Task.FromResult(shared == 1);
     }
 
-    public Task<bool> Publish(string author, string folder, string name, byte[] data, CancellationToken cancel)
+    private const string TemplateColumns = "id, name, folder, author, updated";
+
+    private static TemplateInfo ReadTemplate(SqliteDataReader row) =>
+        new(row.GetString(0), row.GetString(1), row.GetString(2), row.GetString(3), row.GetInt64(4));
+
+    private static long Now() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    public Task<TemplateInfo?> Publish(string author, string folder, string name, byte[] data, CancellationToken cancel)
     {
         using var db = database.Open();
+        var id = Guid.NewGuid().ToString("N");
         var published = db.Execute($"""
-            INSERT INTO templates(id, folder, author, name, data)
-            SELECT $id, $folder, $user, $name, $data WHERE $folder='' OR $folder IN ({FoldersOf})
-            """, ("id", Guid.NewGuid().ToString("N")), ("folder", folder), ("user", author), ("name", name.Trim()), ("data", data));
-        return Task.FromResult(published == 1);
+            INSERT INTO templates(id, folder, author, name, data, updated)
+            SELECT $id, $folder, $user, $name, $data, $now WHERE $folder='' OR $folder IN ({FoldersOf})
+            """, ("id", id), ("folder", folder), ("user", author), ("name", name.Trim()), ("data", data), ("now", Now()));
+        return Task.FromResult(published == 1 ? Single(db, id) : null);
     }
+
+    public Task<TemplateInfo?> Update(string author, string id, string name, byte[] data, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        // Never older than the version it replaces, even if the clock went back.
+        var updated = db.Execute("UPDATE templates SET name=$name, data=$data, updated=max(updated + 1, $now) WHERE id=$id AND author=$user",
+            ("id", id), ("user", author), ("name", name.Trim()), ("data", data), ("now", Now()));
+        return Task.FromResult(updated == 1 ? Single(db, id) : null);
+    }
+
+    public Task<bool> Remove(string user, bool admin, string id, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        return Task.FromResult(db.Execute("DELETE FROM templates WHERE id=$id AND ($admin OR author=$user)",
+            ("id", id), ("user", user), ("admin", admin)) == 1);
+    }
+
+    public Task<IReadOnlyList<SharedTemplate>> All(CancellationToken cancel)
+    {
+        using var db = database.Open();
+        IReadOnlyList<SharedTemplate> rows = db.Rows("""
+            SELECT templates.id, templates.name, templates.author, folders.name, templates.updated
+            FROM templates LEFT JOIN folders ON folders.id=templates.folder ORDER BY templates.name
+            """,
+            row => new SharedTemplate(row.GetString(0), row.GetString(1), row.GetString(2), row.IsDBNull(3) ? null : row.GetString(3),
+                DateTimeOffset.FromUnixTimeMilliseconds(row.GetInt64(4))));
+        return Task.FromResult(rows);
+    }
+
+    private static TemplateInfo? Single(SqliteConnection db, string id) =>
+        db.Rows($"SELECT {TemplateColumns} FROM templates WHERE id=$id", ReadTemplate, ("id", id)) is [var row] ? row : null;
 
     public Task<byte[]?> Find(string user, string id, CancellationToken cancel)
     {

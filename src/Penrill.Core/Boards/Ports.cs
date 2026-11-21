@@ -2,7 +2,8 @@ namespace Penrill.Core.Boards;
 
 public enum BoardAccess { Missing, Denied, Allowed }
 
-public sealed record BoardSummary(string Id, string Title, long Seq, DateTimeOffset Updated);
+/// <summary>A board the user can open. <c>Owner</c> is who made it; empty for boards from before accounts.</summary>
+public sealed record BoardSummary(string Id, string Title, long Seq, DateTimeOffset Updated, string Owner);
 
 public sealed record StoredChange(long Seq, string Id, string Author, byte[] Body);
 

@@ -11,7 +11,7 @@ internal sealed partial class SqliteMigrator(SqliteDatabase database, FileAssetS
 {
     private delegate void Migration(SqliteConnection db);
 
-    private Migration[] Migrations => [CreateFirstSchema, MoveToChangeLog, AddAccessControl];
+    private Migration[] Migrations => [CreateFirstSchema, MoveToChangeLog, AddAccessControl, AddTemplateVersions];
 
     public void Migrate()
     {
@@ -93,6 +93,10 @@ internal sealed partial class SqliteMigrator(SqliteDatabase database, FileAssetS
             CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """);
     }
+
+    /// <summary>Shared templates get a version, so copies on devices follow their author's edits.</summary>
+    private static void AddTemplateVersions(SqliteConnection db) =>
+        db.Execute("ALTER TABLE templates ADD COLUMN updated INTEGER NOT NULL DEFAULT 0");
 
     private void ImportLegacyBoard(SqliteConnection db, string id, string title, string updated, long revision, byte[] file)
     {

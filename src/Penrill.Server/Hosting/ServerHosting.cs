@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Penrill.Api.Hosting;
 using Penrill.Server.Cli;
+using Penrill.Server.Web;
 
 namespace Penrill.Server.Hosting;
 
@@ -12,7 +13,7 @@ public static class ServerHosting
 
     /// <summary>
     /// Chooses the address mode and the endpoints Kestrel listens on, and adds the server's own web
-    /// pages and their sign-in. <c>PENRILL_ADDRESS_MODE=lan</c> is set by the installed service; without
+    /// app and its sign-in. <c>PENRILL_ADDRESS_MODE=lan</c> is set by the installed service; without
     /// it the server stays on loopback over HTTP, as in development and behind a local reverse proxy.
     /// </summary>
     public static WebApplicationBuilder AddPenrillServer(this WebApplicationBuilder builder)
@@ -72,19 +73,27 @@ public static class ServerHosting
         services.AddAuthorizationBuilder()
             .AddPolicy(WebSessionHandler.SchemeName, policy => policy.AddAuthenticationSchemes(WebSessionHandler.SchemeName).RequireAuthenticatedUser())
             .AddPolicy(WebSessionHandler.AdminPolicy, policy => policy.AddAuthenticationSchemes(WebSessionHandler.SchemeName).RequireRole("Admin", "Owner"));
-        services.AddRazorPages(options =>
-        {
-            options.Conventions.AuthorizeFolder("/", WebSessionHandler.SchemeName);
-            options.Conventions.AuthorizeFolder("/Admin", WebSessionHandler.AdminPolicy);
-            foreach (var page in new[] { "/Setup", "/Login", "/Invite", "/Reset" }) options.Conventions.AllowAnonymousToPage(page);
-        });
         return builder;
     }
 
     public static WebApplication MapPenrillServer(this WebApplication app)
     {
         app.UseStaticFiles();
-        app.MapRazorPages();
+        WebEndpoints.Map(app);
+        // Every other path is a page of the web app (wwwroot, built from Penrill's apps/server), which routes itself.
+        app.MapFallback(async context =>
+        {
+            var path = context.Request.Path;
+            var index = app.Environment.WebRootFileProvider.GetFileInfo("index.html");
+            if (path.StartsWithSegments("/api") || path.StartsWithSegments("/web") || Path.HasExtension(path.Value) || !index.Exists)
+            {
+                context.Response.StatusCode = StatusCodes.Status404NotFound;
+                return;
+            }
+            context.Response.ContentType = "text/html; charset=utf-8";
+            context.Response.Headers.CacheControl = "no-cache";
+            await context.Response.SendFileAsync(index);
+        }).AllowAnonymous();
         AdminCommands.Map(app);
         app.MapGet("/health", () => Results.Ok(new { service = "penrill-server" })).AllowAnonymous();
         return app;

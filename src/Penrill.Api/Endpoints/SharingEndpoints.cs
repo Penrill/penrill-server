@@ -29,13 +29,17 @@ internal static class SharingEndpoints
             input.Folder is null || input.Board is null || !BoardLimits.IsBoardId(input.Board) ? Results.BadRequest()
             : await sharing.ShareBoard(user.UserName(), input.Folder, input.Board, cancel) ? Results.NoContent() : Results.Conflict());
         api.MapPost("/templates", async (string name, string? folder, HttpRequest request, ClaimsPrincipal user, ITemplateStore templates, CancellationToken cancel) =>
-        {
-            if (!TemplateFile.IsLabel(name)) return Results.BadRequest();
-            if (await Bodies.Read(request, BoardLimits.MaxBoardBytes, cancel) is not { } data) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
-            if (!TemplateFile.IsBoard(data)) return Results.BadRequest();
-            return await templates.Publish(user.UserName(), folder ?? "", name, data, cancel) ? Results.NoContent() : Results.NotFound();
-        });
+            await TemplateBody(name, request, cancel) is not { } data ? Results.BadRequest()
+            : await templates.Publish(user.UserName(), folder ?? "", name, data, cancel) is { } info ? Results.Ok(info) : Results.NotFound());
+        api.MapPut("/templates/{id}", async (string id, string name, HttpRequest request, ClaimsPrincipal user, ITemplateStore templates, CancellationToken cancel) =>
+            await TemplateBody(name, request, cancel) is not { } data ? Results.BadRequest()
+            : await templates.Update(user.UserName(), id, name, data, cancel) is { } info ? Results.Ok(info) : Results.NotFound());
+        api.MapDelete("/templates/{id}", async (string id, ClaimsPrincipal user, ITemplateStore templates, CancellationToken cancel) =>
+            await templates.Remove(user.UserName(), user.IsInRole("Admin") || user.IsInRole("Owner"), id, cancel) ? Results.NoContent() : Results.NotFound());
         api.MapGet("/templates/{id}", async (string id, ClaimsPrincipal user, ITemplateStore templates, CancellationToken cancel) =>
             await templates.Find(user.UserName(), id, cancel) is { } data ? Results.Bytes(data, "application/json") : Results.NotFound());
     }
+
+    private static async Task<byte[]?> TemplateBody(string name, HttpRequest request, CancellationToken cancel) =>
+        TemplateFile.IsLabel(name) && await Bodies.Read(request, BoardLimits.MaxBoardBytes, cancel) is { } data && TemplateFile.IsBoard(data) ? data : null;
 }

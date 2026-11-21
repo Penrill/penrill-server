@@ -68,6 +68,12 @@ dotnet run --project src/Penrill.Server   # http://127.0.0.1:5081, data in src/P
 dotnet test
 ```
 
+The server's web pages (setup, sign-in, devices, administration) are a React app that lives in the
+Penrill repository under `apps/server` and talks to the JSON API in `src/Penrill.Server/Web`. Its
+build is committed in `src/Penrill.Server/wwwroot`, so the server builds and ships without Node. To
+change the pages, check out Penrill next to this repository and run `npm run dev:server-ui` there
+(http://localhost:5175, with this server running) and `npm run build:server-ui` to update `wwwroot`.
+
 `PENRILL_CONNECT_PAGE` sends connect links to a local web editor (`http://localhost:5174/app/`)
 instead of penrill.com/connect. `PENRILL_ADDRESS_MODE=lan` switches to the installed behaviour (TLS on all interfaces, port from
 `PENRILL_PORT`). `PENRILL_OPEN_REGISTRATION=true` allows anyone to register, as Penrill Cloud does.

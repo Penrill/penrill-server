@@ -69,8 +69,12 @@ internal sealed class SqliteBoardStore(SqliteDatabase database) : IBoardStore
     {
         using var db = database.Open();
         IReadOnlyList<BoardSummary> boards = db.Rows(
-            $"SELECT id, title, seq, updated FROM boards WHERE id IN ({SqlAccess.BoardsOf}) ORDER BY updated DESC, id",
-            row => new BoardSummary(row.GetString(0), row.GetString(1), row.GetInt64(2), SqliteCommands.ParseStamp(row.GetString(3))),
+            $"""
+            SELECT boards.id, boards.title, boards.seq, boards.updated, coalesce(owners.user, '')
+            FROM boards LEFT JOIN owners ON owners.board=boards.id
+            WHERE boards.id IN ({SqlAccess.BoardsOf}) ORDER BY boards.updated DESC, boards.id
+            """,
+            row => new BoardSummary(row.GetString(0), row.GetString(1), row.GetInt64(2), SqliteCommands.ParseStamp(row.GetString(3)), row.GetString(4)),
             ("user", user));
         return Task.FromResult(boards);
     }
