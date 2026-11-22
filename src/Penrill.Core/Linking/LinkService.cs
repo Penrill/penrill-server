@@ -39,6 +39,8 @@ internal sealed class LinkRequest(string deviceHash, string userCode, string dev
 
     public string Device => device;
 
+    public string Address => address;
+
     public Task Decided => decided.Task;
 
     public LinkState State(DateTimeOffset now)
@@ -77,6 +79,8 @@ public sealed class LinkOptions
     /// <summary>Shorter than the 20 second request timeout editors use.</summary>
     public TimeSpan LongPoll { get; set; } = TimeSpan.FromSeconds(15);
     public int MaxPending { get; set; } = 1000;
+    /// <summary>Stops one address from taking every slot. A school behind one address still has room for a class.</summary>
+    public int MaxPendingPerAddress { get; set; } = 30;
 }
 
 /// <summary>
@@ -99,6 +103,9 @@ public sealed class LinkService(AccountService accounts, TimeProvider time, Link
         Sweep();
         if (byDevice.Count >= options.MaxPending) return null;
         var now = time.GetUtcNow();
+        var origin = Clip(address, 64);
+        if (origin.Length > 0 && byDevice.Values.Count(open => open.Address == origin && open.State(now) is LinkState.Pending or LinkState.Approved) >= options.MaxPendingPerAddress)
+            return null;
         var deviceCode = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         while (true)
         {
@@ -118,6 +125,7 @@ public sealed class LinkService(AccountService accounts, TimeProvider time, Link
     /// <summary>Waits up to the long-poll time for a decision, then answers once.</summary>
     public async Task<PollResult> Poll(string? deviceCode, CancellationToken cancel)
     {
+        Sweep();
         if (deviceCode is not { Length: 64 } || !byDevice.TryGetValue(AccountService.HashToken(deviceCode), out var request))
             return new(PollStatus.Expired);
         if (request.State(time.GetUtcNow()) == LinkState.Pending)
@@ -174,7 +182,7 @@ public sealed class LinkService(AccountService accounts, TimeProvider time, Link
     {
         var now = time.GetUtcNow();
         foreach (var (_, request) in byDevice)
-            if (now >= request.Expires + options.Lifetime) Forget(request);
+            if (now >= request.Expires) Forget(request); // A poll for a forgotten request is answered "expired" all the same.
     }
 
     private static string NewUserCode() =>

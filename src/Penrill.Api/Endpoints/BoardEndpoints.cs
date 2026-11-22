@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Logging;
 using Penrill.Api.Hosting;
+using Penrill.Core.Accounts;
 using Penrill.Core.Boards;
 using Penrill.Core.Rooms;
 using Penrill.Core.Telemetry;
@@ -50,12 +51,13 @@ internal static partial class BoardEndpoints
         if (await Bodies.Read(request, BoardLimits.MaxBoardBytes, cancel) is not { } body) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         if (!BoardContent.TryParse(Bodies.ParseJson(body), out var content)) return Results.BadRequest();
         var owner = user.UserName();
-        if (await store.Create(new NewBoard(id, owner, content, time.GetUtcNow()), cancel))
+        var guest = user.IsInRole(nameof(Role.Guest));
+        if (!guest && await store.Create(new NewBoard(id, owner, content, time.GetUtcNow()), cancel))
         {
             LogCreated(loggers.CreateLogger("Penrill.Boards"), id, owner, content.Items.Count);
             return Results.Created($"/api/boards/{id}", new { seq = 0L, created = true });
         }
-        if (await access.Check(owner, id, cancel) != BoardAccess.Allowed) return Results.Conflict();
+        if (await access.Check(owner, id, cancel) != BoardAccess.Allowed) return guest ? Results.Forbid() : Results.Conflict();
         return await BoardGuard.WithRoom(rooms, id, cancel, room => Task.FromResult(Results.Ok(new { seq = room.Seq, created = false })));
     }
 

@@ -6,7 +6,11 @@ using Penrill.Core.Telemetry;
 
 namespace Penrill.Core.Accounts;
 
-public enum Role { Member = 0, Admin = 1, Owner = 2 }
+/// <summary>
+/// <c>Guest</c> is the account a draw link makes for someone who just wants to draw on one board: it can work on boards
+/// it was let into, but cannot create boards, folders or shared templates. Negative so that role-ordered lists put guests last.
+/// </summary>
+public enum Role { Guest = -1, Member = 0, Admin = 1, Owner = 2 }
 
 /// <summary>A web session comes from a password sign-in and expires; a device token comes from an approved link and lives until revoked.</summary>
 public enum CredentialKind { Session = 0, Device = 1 }

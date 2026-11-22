@@ -13,6 +13,8 @@ public static class BoardLimits
     public const int MaxChangeId = 64;
     public const int MaxSignalBytes = 64 * 1024;
     public const int MaxAssetBytes = 25 * 1024 * 1024;
+    /// <summary>All images on one board together, so a draw link cannot be used to fill the disk.</summary>
+    public const long MaxBoardAssetBytes = 256L * 1024 * 1024;
 
     public static bool IsBoardId(string id) => id.Length is 32 or 64 && id.All(char.IsAsciiHexDigitLower);
 

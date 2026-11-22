@@ -93,7 +93,7 @@ All routes take `Authorization: Bearer <token>` except register and login.
 | `GET /api/boards/{id}/link` | owner only: `{token}` of the board's draw link, `null` while it is off (404 for others) |
 | `POST /api/boards/{id}/link` | owner only: turns the draw link on (the same token while it stays on) and answers `{token}` |
 | `DELETE /api/boards/{id}/link` | owner only: turns the link off and takes out everyone who came in through it (204) |
-| `POST /api/join` | no sign-in: `{token, name}` makes a guest account that can reach only that board; answers `{name, token, board}` (404 for an unknown or turned-off link). Signed in, the caller's own account gets the board instead and `token` is `null` |
+| `POST /api/join` | no sign-in: `{token, name}` makes a guest account that works on that board only (it cannot create boards, folders or shared templates, and its images count toward the board's 256 MiB image quota; turning the link off disconnects guests already on the board); answers `{name, token, board}` (404 for an unknown or turned-off link). Signed in, the caller's own account gets the board instead and `token` is `null` |
 | `PUT /api/boards/{id}/assets/{sha256}` | upload image bytes; the server checks the hash |
 | `GET /api/boards/{id}/assets/{sha256}` | download image bytes (immutable) |
 

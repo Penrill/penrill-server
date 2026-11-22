@@ -152,4 +152,33 @@ public sealed class AccessTests : IDisposable
         Assert.True(await admin.SetDisabled("bob", true, default));
         Assert.Equal(HttpStatusCode.Unauthorized, (await As(factory.CreateClient(), token).GetAsync("/api/boards")).StatusCode);
     }
+
+    [Fact]
+    public void OneAddressCannotTakeEveryLinkSlot()
+    {
+        var links = factory.Services.GetRequiredService<LinkService>();
+        var limit = factory.Services.GetRequiredService<LinkOptions>().MaxPendingPerAddress;
+        for (var i = 0; i < limit; i++) Assert.NotNull(links.Start("Tablet", "", "203.0.113.7"));
+        Assert.Null(links.Start("Tablet", "", "203.0.113.7"));
+        Assert.NotNull(links.Start("Tablet", "", "203.0.113.8"));
+    }
+
+    [Fact]
+    public async Task ExpiredLinkRequestsAreForgotten()
+    {
+        var time = new FakeTime();
+        var links = new LinkService(factory.Services.GetRequiredService<AccountService>(), time, new LinkOptions { Lifetime = TimeSpan.FromMinutes(10) });
+        var start = links.Start("Tablet", "", "203.0.113.7")!;
+        time.Advance(TimeSpan.FromMinutes(11));
+        Assert.Equal(PollStatus.Expired, (await links.Poll(start.DeviceCode, default)).Status);
+        Assert.Null(links.Describe(start.UserCode));
+    }
+
+    private sealed class FakeTime : TimeProvider
+    {
+        private DateTimeOffset now = DateTimeOffset.UtcNow;
+        public override DateTimeOffset GetUtcNow() => now;
+        public void Advance(TimeSpan by) => now += by;
+    }
 }
+

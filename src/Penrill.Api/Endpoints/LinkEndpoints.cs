@@ -11,6 +11,9 @@ namespace Penrill.Api.Endpoints;
 /// <summary>Device linking (see <see cref="LinkService"/>) and the devices an account has linked.</summary>
 internal static class LinkEndpoints
 {
+    /// <summary>A device polls every few seconds while someone approves it, so this is looser than the sign-in limit.</summary>
+    public const string PollLimit = "link-poll";
+
     public sealed record StartBody(string? Device, string? App);
 
     public sealed record PollBody(string? DeviceCode);
@@ -45,7 +48,7 @@ internal static class LinkEndpoints
                 PollStatus.Denied => Results.StatusCode(StatusCodes.Status403Forbidden),
                 _ => Results.StatusCode(StatusCodes.Status410Gone)
             };
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(PollLimit);
 
         link.MapGet("/{code}", (string code, LinkService links) =>
             links.Describe(code) is { State: LinkState.Pending } info ? Results.Ok(Describe(info)) : Results.NotFound());

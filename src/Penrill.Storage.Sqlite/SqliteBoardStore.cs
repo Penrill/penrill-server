@@ -101,6 +101,12 @@ internal sealed class SqliteBoardStore(SqliteDatabase database) : IBoardStore
         return Task.CompletedTask;
     }
 
+    public Task<long> AssetBytes(string board, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        return Task.FromResult(db.Scalar("SELECT coalesce(sum(size), 0) FROM assets WHERE board=$board", ("board", board)) is long total ? total : 0);
+    }
+
     public Task<AssetInfo?> FindAsset(string board, string hash, CancellationToken cancel)
     {
         using var db = database.Open();

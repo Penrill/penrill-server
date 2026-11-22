@@ -45,7 +45,14 @@ public static class PenrillApiExtensions
             options.AddPolicy(AccountEndpoints.RateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.Connection.RemoteIpAddress?.ToString() ?? "",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
+            options.AddPolicy(LinkEndpoints.PollLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = 240, Window = TimeSpan.FromMinutes(1) }));
         });
+        // Behind a reverse proxy on this machine every client reaches Kestrel from the proxy's address, so the per-address limits
+        // above would be one shared bucket. With PENRILL_TRUST_PROXY the proxy's X-Forwarded-For/-Proto are believed, from loopback only.
+        services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
+            options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto);
         // Penrill in the browser lives on penrill.com; the rest are local development editors.
         var origins = builder.Configuration["PENRILL_EDITOR_ORIGINS"] ?? "https://penrill.com,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173";
         services.AddCors(options => options.AddDefaultPolicy(policy => policy
@@ -59,6 +66,7 @@ public static class PenrillApiExtensions
     {
         // Chrome asks before a public site such as penrill.com talks to a server on the local network
         // (Private Network Access); the preflight has to say the server agrees.
+        if (app.Configuration.GetValue("PENRILL_TRUST_PROXY", false)) app.UseForwardedHeaders();
         app.Use((context, next) =>
         {
             if (HttpMethods.IsOptions(context.Request.Method) && context.Request.Headers.ContainsKey("Access-Control-Request-Private-Network"))

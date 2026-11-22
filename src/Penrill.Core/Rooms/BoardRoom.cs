@@ -141,6 +141,12 @@ public sealed partial class BoardRoom
         }
     }
 
+    /// <summary>Who is on the room right now.</summary>
+    public IReadOnlyList<IRoomMember> Members()
+    {
+        lock (membersLock) return [.. members.Values];
+    }
+
     public void Detach(IRoomMember member)
     {
         bool removed;
