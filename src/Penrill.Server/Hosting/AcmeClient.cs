@@ -76,9 +76,11 @@ public sealed class AcmeClient
                 {
                     var nonce = await GetNonceAsync();
                     var jwsBody = SignJws(accountKey, url, nonce, kid, payload);
+                    var content = new ByteArrayContent(Encoding.UTF8.GetBytes(jwsBody));
+                    content.Headers.ContentType = new MediaTypeHeaderValue("application/jose+json");
                     using var req = new HttpRequestMessage(HttpMethod.Post, url)
                     {
-                        Content = new StringContent(jwsBody, Encoding.UTF8, "application/jose+json")
+                        Content = content
                     };
                     var resp = await http.SendAsync(req, cancel);
                     if (resp.Headers.TryGetValues("Replay-Nonce", out var nonces))
@@ -350,6 +352,15 @@ public sealed class AcmeClient
                 var type = (string?)node["type"];
                 if (!string.IsNullOrWhiteSpace(detail))
                     return !string.IsNullOrWhiteSpace(type) ? $"{detail} ({type})" : detail;
+
+                if (node["challenges"] is JsonArray challenges)
+                {
+                    foreach (var ch in challenges)
+                    {
+                        if (ch?["error"] is JsonObject errObj && (string?)errObj["detail"] is { Length: > 0 } chDetail)
+                            return chDetail;
+                    }
+                }
             }
         }
         catch
