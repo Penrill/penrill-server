@@ -129,23 +129,39 @@ public static class InteractiveConfigurator
     private static Task ShowConnectScreenAsync(CliStateDto state)
     {
         var activeIndex = 0;
+        var useAppLink = false;
         while (true)
         {
             var nets = state.ActiveNetworks.Count > 0
                 ? state.ActiveNetworks
                 : [new CliNetworkDto("Server", "lan", state.Origin, true)];
             var current = nets[Math.Clamp(activeIndex, 0, nets.Count - 1)];
+            var connectBase = state.ConnectLink.Split('#')[0];
+            string AppLinkOf(string origin) =>
+                connectBase + "#server=" + Uri.EscapeDataString(origin) + (state.Pin is null ? "" : "&pin=" + Uri.EscapeDataString(state.Pin));
+
+            var qrUrl = useAppLink ? AppLinkOf(current.Origin) : current.Origin;
+            var qrTitle = useAppLink ? $"Penrill App Connect ({current.Label})" : $"Server Web Panel ({current.Label})";
 
             TerminalUi.Header("Connect Penrill & Web Panel", $"{nets.Count} active network(s)");
             Console.WriteLine();
-            Console.WriteLine($"  {TerminalUi.Bold}Web Admin Panel & Server Addresses:{TerminalUi.Reset}");
-            Console.WriteLine($"  {TerminalUi.Muted}(Open directly in your browser, or enter in Penrill › Sync › Your server){TerminalUi.Reset}");
+            Console.WriteLine($"  {TerminalUi.Bold}Server Web Admin & Account Panel:{TerminalUi.Reset}");
+            Console.WriteLine($"  {TerminalUi.Muted}(Open in browser to manage server, or enter in Penrill › Sync › Your server){TerminalUi.Reset}");
             Console.WriteLine();
             for (var i = 0; i < nets.Count; i++)
             {
                 var net = nets[i];
-                var marker = i == activeIndex ? $"{TerminalUi.Green}●{TerminalUi.Reset}" : " ";
+                var marker = i == activeIndex && !useAppLink ? $"{TerminalUi.Green}●{TerminalUi.Reset}" : " ";
                 Console.WriteLine($"  {marker} {TerminalUi.Bold}{net.Label,-26}{TerminalUi.Reset} {TerminalUi.Cyan}{net.Origin}{TerminalUi.Reset}");
+            }
+            Console.WriteLine();
+            Console.WriteLine($"  {TerminalUi.Bold}Penrill Web App Connect Links (app.penrill.com):{TerminalUi.Reset}");
+            Console.WriteLine();
+            for (var i = 0; i < nets.Count; i++)
+            {
+                var net = nets[i];
+                var marker = i == activeIndex && useAppLink ? $"{TerminalUi.Green}●{TerminalUi.Reset}" : " ";
+                Console.WriteLine($"  {marker} {TerminalUi.Bold}{net.Label,-26}{TerminalUi.Reset} {TerminalUi.Cyan}{AppLinkOf(net.Origin)}{TerminalUi.Reset}");
             }
             if (state.ShortPin is { } pin)
             {
@@ -153,28 +169,26 @@ public static class InteractiveConfigurator
                 Console.WriteLine($"  {TerminalUi.Muted}TLS Certificate Fingerprint:{TerminalUi.Reset} {TerminalUi.Bold}{pin}{TerminalUi.Reset}  {TerminalUi.Muted}({state.Pin}){TerminalUi.Reset}");
             }
             Console.WriteLine();
-            Console.WriteLine($"  {TerminalUi.Bold}QR Code for {current.Label} ({current.Origin}):{TerminalUi.Reset}");
+            Console.WriteLine($"  {TerminalUi.Bold}QR Code — {qrTitle}:{TerminalUi.Reset}");
             Console.WriteLine();
-            Console.Write(Qr.Terminal(current.Origin));
+            Console.Write(Qr.Terminal(qrUrl));
             Console.WriteLine();
 
-            if (nets.Count <= 1)
-            {
-                TerminalUi.Pause();
-                return Task.CompletedTask;
-            }
-
-            var switchOpts = new List<SelectOption<int>>();
+            var switchOpts = new List<SelectOption<string>>();
             for (var i = 0; i < nets.Count; i++)
             {
-                if (i == activeIndex) continue;
-                switchOpts.Add(new($"📱 Show QR code for {nets[i].Label}", i, nets[i].Origin));
+                if (i != activeIndex || useAppLink)
+                    switchOpts.Add(new($"🌐 Show Server Web Panel QR for {nets[i].Label}", $"panel:{i}", nets[i].Origin));
+                if (i != activeIndex || !useAppLink)
+                    switchOpts.Add(new($"📱 Show Penrill App Connect QR for {nets[i].Label}", $"app:{i}", "app.penrill.com/connect"));
             }
-            switchOpts.Add(new("← Back to main menu", -1));
+            switchOpts.Add(new("← Back to main menu", "back"));
 
-            var (ok, nextIndex) = TerminalUi.Select("Switch QR code network or return", switchOpts);
-            if (!ok || nextIndex < 0) return Task.CompletedTask;
-            activeIndex = nextIndex;
+            var (ok, pick) = TerminalUi.Select("Switch QR code or return", switchOpts);
+            if (!ok || pick == "back") return Task.CompletedTask;
+            var parts = pick.Split(':');
+            useAppLink = parts[0] == "app";
+            activeIndex = int.Parse(parts[1], CultureInfo.InvariantCulture);
         }
     }
 
@@ -722,7 +736,7 @@ public static class InteractiveConfigurator
         var origins = TerminalUi.Prompt(
             "Extra web editor CORS origins (optional, comma-separated)",
             defaultValue: "",
-            placeholder: "leave empty for default penrill.com");
+            placeholder: "leave empty for default app.penrill.com");
         if (origins is null) return;
 
         Console.WriteLine();

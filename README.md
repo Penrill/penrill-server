@@ -83,7 +83,7 @@ Choose **Configure right here in the terminal** to set up your server directly o
 ## Connecting Penrill
 
 - **Desktop or Web App:** In Penrill, open **Sync › Your server**. Servers on the same local network appear automatically via mDNS/Avahi (`_penrill._tcp`), or you can enter the address shown on your server's home page. Penrill opens your browser to approve the device—no password is typed into the editor.
-- **Tablet or Phone:** Scan the QR code shown on your server's home page (or run `sudo penrill-server link`). The link opens `penrill.com/connect`, which launches the installed Penrill app or opens Penrill in the browser. Your server's address and certificate pin stay in the URL fragment (`#server=...`), so they are never sent to `penrill.com`.
+- **Tablet or Phone:** Scan the QR code shown on your server's home page (or run `sudo penrill-server link`). The link opens `app.penrill.com/connect`, which launches the installed Penrill app or opens Penrill in the browser. Your server's address and certificate pin stay in the URL fragment (`#server=...`), so they are never sent to `app.penrill.com`.
 
 ---
 
@@ -166,7 +166,7 @@ By default, the installed service listens on port **`5081`** with TLS on all net
 | `PENRILL_EDITOR_ORIGINS` | `editor-origins` | *(none)* | Comma-separated extra CORS origins allowed to connect (for self-hosted web editors) |
 | `PENRILL_OPEN_REGISTRATION` | `open-registration` | `false` | Set to `true` to allow open registration without invite links |
 | `PENRILL_DATA_DIR` | *(managed by snap)* | `/var/lib/penrill-server` | Directory where `boards.db`, assets, and TLS keys are stored |
-| `PENRILL_CONNECT_PAGE` | — | `https://penrill.com/connect` | Base URL used when generating device connect links |
+| `PENRILL_CONNECT_PAGE` | — | `https://app.penrill.com/connect` | Base URL used when generating device connect links |
 
 - **On APT / systemd:** Run `sudo systemctl edit penrill-server` and add `Environment="PENRILL_EDITOR_ORIGINS=https://draw.example.com"` under `[Service]`, then `sudo systemctl restart penrill-server`.
 - **On Snap:** Run `sudo snap set penrill-server port=5081` or `sudo snap set penrill-server editor-origins="https://draw.example.com"`.

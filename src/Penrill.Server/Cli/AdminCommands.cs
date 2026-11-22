@@ -221,6 +221,7 @@ public static class AdminCommands
     private static async Task<IResult> Link(CliContext c)
     {
         var address = c.Get<ServerAddress>();
+        var links = c.Get<ConnectLinks>();
         var nets = await ActiveNetworksOf(c);
         var primary = nets[0];
         var sb = new StringBuilder();
@@ -228,6 +229,11 @@ public static class AdminCommands
         sb.AppendLine();
         foreach (var net in nets)
             sb.AppendLine($"  • {net.Label,-24} {net.Origin}");
+        sb.AppendLine();
+        sb.AppendLine("Connect in Penrill Web App (app.penrill.com):");
+        sb.AppendLine();
+        foreach (var net in nets)
+            sb.AppendLine($"  • {net.Label,-24} {links.For(net.Origin, address.Pin)}");
         if (address.ShortPin is { } pin)
         {
             sb.AppendLine();

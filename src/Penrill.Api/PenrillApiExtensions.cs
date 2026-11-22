@@ -46,10 +46,12 @@ public static class PenrillApiExtensions
                 context.Connection.RemoteIpAddress?.ToString() ?? "",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
         });
-        // Penrill in the browser lives on penrill.com; the rest are local development editors.
-        var origins = builder.Configuration["PENRILL_EDITOR_ORIGINS"] ?? "https://penrill.com,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173";
+        // Penrill in the browser lives on app.penrill.com (and penrill.com); the rest are local development editors.
+        const string defaultOrigins = "https://app.penrill.com,https://penrill.com,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173";
+        var extraOrigins = builder.Configuration["PENRILL_EDITOR_ORIGINS"];
+        var origins = string.IsNullOrWhiteSpace(extraOrigins) ? defaultOrigins : $"{defaultOrigins},{extraOrigins}";
         services.AddCors(options => options.AddDefaultPolicy(policy => policy
-            .WithOrigins(origins.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            .WithOrigins(origins.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
             .WithMethods("GET", "PUT", "POST", "DELETE")
             .WithHeaders("Content-Type", "Authorization")));
         return builder;
