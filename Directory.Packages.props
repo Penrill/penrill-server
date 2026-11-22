@@ -8,10 +8,10 @@
   <Import Project="$(MSBuildThisFileDirectory)Directory.Packages.net10.0.props" />
   <ItemGroup>
     <PackageVersion Include="Ardalis.GuardClauses" Version="5.0.0" />
-    <PackageVersion Include="AutoMapper" Version="17.0.0" />
     <PackageVersion Include="coverlet.collector" Version="10.1.1" />
     <PackageVersion Include="FluentValidation.DependencyInjectionExtensions" Version="12.2.0" />
-    <PackageVersion Include="MediatR" Version="15.0.0" />
+    <!-- The last Apache-2.0 release; later ones are RPL-1.5 or commercial. See docs/decisions/ADR-008. -->
+    <PackageVersion Include="MediatR" Version="12.5.0" />
     <PackageVersion Include="MediatR.Contracts" Version="2.0.1" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageVersion Include="Moq" Version="4.21.0" />

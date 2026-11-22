@@ -13,3 +13,4 @@ ADR-001 to ADR-003 come from the Clean Architecture solution template.
 | [ADR-005](ADR-005-Opaque-Bearer-Tokens.md) | Opaque Bearer Tokens Stored as Hashes, Next to ASP.NET Core Identity | 2026-11-22 | Accepted |
 | [ADR-006](ADR-006-Wire-Contract-Is-Fixed.md) | The Editor API Does Not Change Shape | 2026-11-22 | Accepted |
 | [ADR-007](ADR-007-Provider-Neutral-Model.md) | One EF Core Model, Migrations per Host | 2026-11-22 | Accepted |
+| [ADR-008](ADR-008-Free-MediatR-And-AutoMapper.md) | MediatR Held at 12.5.0, No AutoMapper | 2026-11-22 | Accepted |

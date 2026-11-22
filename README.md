@@ -214,9 +214,8 @@ The code follows the Clean Architecture solution template; start with [docs/ARCH
 Its core (Domain, Application, Infrastructure, Web) is shared with Penrill Cloud as NuGet packages; see
 [docs/EXTENDING.md](docs/EXTENDING.md).
 
-MediatR and AutoMapper need a license key in production (free for small organisations, see
-[luckypennysoftware.com](https://luckypennysoftware.com)). Set `MediatR__LicenseKey` and `AutoMapper__LicenseKey`
-in the service environment; without them both only log a warning.
+MediatR is held at 12.5.0, its last Apache-2.0 release, and AutoMapper is not used; see
+[ADR-008](docs/decisions/ADR-008-Free-MediatR-And-AutoMapper.md) before changing either.
 
 ### Web UI (`wwwroot`)
 

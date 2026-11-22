@@ -15,23 +15,16 @@ public static class DependencyInjection
 {
     /// <summary>
     /// The shared use cases and services. A host that adds use cases of its own passes their assembly in
-    /// <paramref name="extraAssemblies"/>, so their handlers, validators and mappings join the same pipeline.
+    /// <paramref name="extraAssemblies"/>, so their handlers and validators join the same pipeline.
     /// </summary>
     public static void AddApplicationServices(this IHostApplicationBuilder builder, params Assembly[] extraAssemblies)
     {
         Assembly[] assemblies = [Assembly.GetExecutingAssembly(), .. extraAssemblies];
 
-        builder.Services.AddAutoMapper(cfg =>
-        {
-            cfg.LicenseKey = builder.Configuration["AutoMapper:LicenseKey"];
-            cfg.AddMaps(assemblies);
-        });
-
         builder.Services.AddValidatorsFromAssemblies(assemblies);
 
         builder.Services.AddMediatR(cfg =>
         {
-            cfg.LicenseKey = builder.Configuration["MediatR:LicenseKey"];
             cfg.RegisterServicesFromAssemblies(assemblies);
             cfg.AddOpenRequestPreProcessor(typeof(LoggingBehaviour<>));
             cfg.AddOpenBehavior(typeof(UnhandledExceptionBehaviour<,>));

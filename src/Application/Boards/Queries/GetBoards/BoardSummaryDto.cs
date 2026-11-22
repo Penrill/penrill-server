@@ -12,12 +12,4 @@ public sealed record BoardSummaryDto
     public DateTimeOffset Updated { get; init; }
 
     public string Owner { get; init; } = "";
-
-    private class Mapping : Profile
-    {
-        public Mapping()
-        {
-            CreateMap<Board, BoardSummaryDto>().ForMember(d => d.Owner, o => o.MapFrom(s => s.Owner ?? ""));
-        }
-    }
 }

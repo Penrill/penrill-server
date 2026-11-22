@@ -2,8 +2,9 @@
 
 Penrill Server follows the [Clean Architecture solution template](https://github.com/jasontaylordev/CleanArchitecture)
 (v11, .NET 10): Domain, Application, Infrastructure and Web layers, MediatR requests with pipeline behaviours,
-FluentValidation, AutoMapper, EF Core behind `IApplicationDbContext`, ASP.NET Core Identity, Aspire for local
-orchestration, and NUnit with Shouldly and Moq for tests.
+FluentValidation, EF Core behind `IApplicationDbContext`, ASP.NET Core Identity, Aspire for local orchestration, and
+NUnit with Shouldly and Moq for tests. MediatR is held at 12.5.0 and AutoMapper is not used, for licence and security
+reasons ([ADR-008](decisions/ADR-008-Free-MediatR-And-AutoMapper.md)); queries project with `Select`.
 
 The same core also runs Penrill Cloud. Domain, Application, Infrastructure, Web and the contract tests are published
 as NuGet packages; this repository adds the self-hosted host on SQLite, and Penrill Cloud adds its host on PostgreSQL.
@@ -135,7 +136,7 @@ uploaded image bytes and refused sign-ins.
 | Project | What it covers |
 |---|---|
 | `tests/Domain.UnitTests` | The change format, applying changes, account rules. |
-| `tests/Application.UnitTests` | Behaviours, AutoMapper configuration, problem details mapping. |
+| `tests/Application.UnitTests` | Behaviours and problem details mapping. |
 | `tests/Infrastructure.IntegrationTests` | Board rooms and their log on a real SQLite database. |
 | `tests/Application.FunctionalTests` | The whole server through HTTP and WebSockets: the API contract, claims, invites, resets, administration and the `/web` pages. |
 | `tests/Contract` | The contract fixtures themselves (not run on their own). |
