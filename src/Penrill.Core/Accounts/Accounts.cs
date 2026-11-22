@@ -36,6 +36,7 @@ public interface IAccountStore
     Task<IReadOnlyList<AccountInfo>> List(CancellationToken cancel);
     Task<bool> SetRole(string name, Role role, CancellationToken cancel);
     Task<bool> SetDisabled(string name, bool disabled, CancellationToken cancel);
+    Task<bool> Delete(string name, CancellationToken cancel);
     Task<bool> HasOwner(CancellationToken cancel);
 
     Task CreateCredential(NewCredential credential, CancellationToken cancel);
@@ -163,6 +164,13 @@ public sealed partial class AccountService(IAccountStore store, IPasswordHashing
         if (!await store.SetDisabled(user, disabled, cancel)) return false;
         if (disabled) await RevokeAll(user, cancel);
         return true;
+    }
+
+    public async Task<bool> DeleteAccount(string user, CancellationToken cancel)
+    {
+        if (await store.Find(user, cancel) is not { Role: not Role.Owner }) return false;
+        await RevokeAll(user, cancel);
+        return await store.Delete(user, cancel);
     }
 
     public async Task RevokeAll(string user, CancellationToken cancel)

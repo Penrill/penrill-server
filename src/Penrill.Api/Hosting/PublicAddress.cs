@@ -13,6 +13,9 @@ public interface IPublicAddress
 
     /// <summary><c>sha256/&lt;base64&gt;</c> of the server's public key when its certificate is not publicly trusted.</summary>
     string? Pin { get; }
+
+    /// <summary>Pin for the specific host reached by <paramref name="request"/>; <c>null</c> when that host uses a publicly trusted CA certificate.</summary>
+    string? PinFor(HttpRequest request) => Pin;
 }
 
 internal sealed class RequestAddress : IPublicAddress

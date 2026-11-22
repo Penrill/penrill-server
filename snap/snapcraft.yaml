@@ -1,6 +1,6 @@
 name: penrill-server
 base: core24
-version: '0.3.0'
+version: '0.3.5'
 summary: Board synchronization and sharing server for Penrill
 description: |
   Keeps Penrill boards in sync across your devices and lets you share them,

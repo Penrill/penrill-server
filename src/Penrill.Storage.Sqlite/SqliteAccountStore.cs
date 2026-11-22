@@ -48,6 +48,21 @@ internal sealed class SqliteAccountStore(SqliteDatabase database) : IAccountStor
         return Task.FromResult(db.Execute("UPDATE accounts SET disabled=$disabled WHERE name=$name", ("name", name), ("disabled", disabled ? 1 : 0)) == 1);
     }
 
+    public Task<bool> Delete(string name, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        using var transaction = db.BeginTransaction();
+        if (db.Scalar("SELECT role FROM accounts WHERE name=$name", ("name", name)) is not long role || (Role)role == Role.Owner)
+            return Task.FromResult(false);
+        db.Execute("DELETE FROM credentials WHERE user=$name", ("name", name));
+        db.Execute("DELETE FROM members WHERE user=$name", ("name", name));
+        db.Execute("DELETE FROM board_people WHERE user=$name", ("name", name));
+        db.Execute("DELETE FROM owners WHERE user=$name", ("name", name));
+        var deleted = db.Execute("DELETE FROM accounts WHERE name=$name", ("name", name)) == 1;
+        transaction.Commit();
+        return Task.FromResult(deleted);
+    }
+
     public Task<bool> HasOwner(CancellationToken cancel)
     {
         using var db = database.Open();

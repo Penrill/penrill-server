@@ -177,20 +177,39 @@ if [ "$signed" -eq 1 ]; then
     cat > "$out/install.sh" <<INSTALL
 #!/bin/sh
 set -eu
+arch=\$(dpkg --print-architecture)
 mkdir -p /usr/share/keyrings
 curl -fsSL $repo_url/penrill-archive-keyring.gpg -o /usr/share/keyrings/penrill-archive-keyring.gpg
 chmod 644 /usr/share/keyrings/penrill-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/penrill-archive-keyring.gpg] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
+echo "deb [arch=\$arch signed-by=/usr/share/keyrings/penrill-archive-keyring.gpg] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
 apt-get update
-apt-get install -y penrill-server
+PENRILL_INSTALLER=1 apt-get install -y penrill-server
+if ( : </dev/tty ) 2>/dev/null; then
+    /usr/bin/penrill-server configure </dev/tty >/dev/tty 2>&1 || true
+else
+    /usr/bin/penrill-server setup || true
+fi
 INSTALL
 else
     cat > "$out/install.sh" <<INSTALL
 #!/bin/sh
 set -eu
-echo "deb [trusted=yes] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
+arch=\$(dpkg --print-architecture)
+if curl -fsSLI $repo_url/penrill-archive-keyring.gpg >/dev/null 2>&1; then
+    mkdir -p /usr/share/keyrings
+    curl -fsSL $repo_url/penrill-archive-keyring.gpg -o /usr/share/keyrings/penrill-archive-keyring.gpg
+    chmod 644 /usr/share/keyrings/penrill-archive-keyring.gpg
+    echo "deb [arch=\$arch signed-by=/usr/share/keyrings/penrill-archive-keyring.gpg] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
+else
+    echo "deb [arch=\$arch trusted=yes] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
+fi
 apt-get update
-apt-get install -y penrill-server
+PENRILL_INSTALLER=1 apt-get install -y penrill-server
+if ( : </dev/tty ) 2>/dev/null; then
+    /usr/bin/penrill-server configure </dev/tty >/dev/tty 2>&1 || true
+else
+    /usr/bin/penrill-server setup || true
+fi
 INSTALL
 fi
 chmod +x "$out/install.sh"

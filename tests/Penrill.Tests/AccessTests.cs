@@ -1,12 +1,15 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Penrill.Core.Accounts;
 using Penrill.Core.Linking;
+using Penrill.Server.Hosting;
 
 namespace Penrill.Tests;
 
@@ -151,6 +154,79 @@ public sealed class AccessTests : IDisposable
         Assert.False(await admin.SetDisabled(owner, true, default));
         Assert.True(await admin.SetDisabled("bob", true, default));
         Assert.Equal(HttpStatusCode.Unauthorized, (await As(factory.CreateClient(), token).GetAsync("/api/boards")).StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminCanCreateSetPasswordAndDeleteUsers()
+    {
+        var owner = await Owner();
+        var admin = factory.Services.GetRequiredService<Penrill.Core.Admin.AdminService>();
+        Assert.Equal(SignInStatus.Ok, (await admin.CreateUser("bob", Password, Role.Member, default)).Status);
+        var (bobClient, _) = await SignIn("bob");
+
+        Assert.True(await admin.SetPassword("bob", "brand new password", default));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await bobClient.GetAsync("/api/boards")).StatusCode);
+        var relogin = await factory.CreateClient().PostAsJsonAsync("/api/login", new { name = "bob", password = "brand new password" });
+        relogin.EnsureSuccessStatusCode();
+
+        Assert.False(await admin.DeleteUser(owner, default));
+        Assert.True(await admin.DeleteUser("bob", default));
+        var afterDelete = await factory.CreateClient().PostAsJsonAsync("/api/login", new { name = "bob", password = "brand new password" });
+        Assert.Equal(HttpStatusCode.Unauthorized, afterDelete.StatusCode);
+    }
+
+    [Fact]
+    public void PublicDomainSniCertificateAndPinlessConnectLinks()
+    {
+        Assert.Equal(("myboard", "myboard.duckdns.org"), DuckDnsClient.NormalizeDomain("myboard"));
+        Assert.Equal(("my-board", "my-board.duckdns.org"), DuckDnsClient.NormalizeDomain("https://My-Board.duckdns.org:5081/"));
+        Assert.Null(DuckDnsClient.NormalizeDomain("other.example.com"));
+
+        Assert.Equal("myboard.dedyn.io", DesecClient.NormalizeDomain("myboard"));
+        Assert.Equal("myboard.dedyn.io", DesecClient.NormalizeDomain("https://MyBoard.dedyn.io:5081/"));
+        Assert.Null(DesecClient.NormalizeDomain("192.168.1.253"));
+
+        using var acmeKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var thumbprint = AcmeClient.ComputeJwkThumbprint(acmeKey);
+        var digest = AcmeClient.ComputeDns01Digest("token123", thumbprint);
+        Assert.Equal(43, thumbprint.Length);
+        Assert.Equal(43, digest.Length);
+
+        var certDir = Directory.CreateTempSubdirectory("penrill-tls-").FullName;
+        try
+        {
+            var serverCert = new ServerCertificate(certDir);
+            var address = new ServerAddress(AddressMode.Lan, "", 5081, serverCert);
+
+            Assert.NotNull(address.PinFor("https://192.168.1.253:5081"));
+            Assert.NotNull(address.PinFor("https://myboard.dedyn.io:5081"));
+
+            using var domainKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            var req = new CertificateRequest("CN=myboard.dedyn.io", domainKey, HashAlgorithmName.SHA256);
+            using var issued = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddDays(90));
+            serverCert.SetTrustedDomainCertificate(
+                "myboard.dedyn.io",
+                issued.ExportCertificatePem(),
+                domainKey.ExportPkcs8PrivateKeyPem());
+
+            Assert.Equal("myboard.dedyn.io", serverCert.TrustedDomain);
+            Assert.Equal(serverCert.TrustedCertificate!.Thumbprint, serverCert.SelectCertificate("myboard.dedyn.io").Thumbprint);
+            Assert.Equal(serverCert.Certificate.Thumbprint, serverCert.SelectCertificate("192.168.1.253").Thumbprint);
+
+            // Public domain with trusted cert gets pin == null; LAN address still gets self-signed pin.
+            Assert.Null(address.PinFor("https://myboard.dedyn.io:5081"));
+            Assert.Equal(serverCert.Pin, address.PinFor("https://192.168.1.253:5081"));
+
+            var links = new ConnectLinks(ConnectLinks.DefaultPage);
+            var publicLink = links.For("https://myboard.dedyn.io:5081", address.PinFor("https://myboard.dedyn.io:5081"));
+            var lanLink = links.For("https://192.168.1.253:5081", address.PinFor("https://192.168.1.253:5081"));
+            Assert.DoesNotContain("&pin=", publicLink);
+            Assert.Contains("&pin=", lanLink);
+        }
+        finally
+        {
+            Directory.Delete(certDir, recursive: true);
+        }
     }
 
     [Fact]

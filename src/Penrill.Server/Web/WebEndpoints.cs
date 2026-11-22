@@ -159,7 +159,8 @@ public static class WebEndpoints
         web.MapGet("/home", async (HttpContext context, ClaimsPrincipal user, ServerAddress address, ConnectLinks links, AccountService accounts, AdminService admin, CancellationToken cancel) =>
         {
             var origin = address.Origin(context.Request);
-            var link = links.For(origin, address.Pin);
+            var pin = address.PinFor(context.Request);
+            var link = links.For(origin, pin);
             var devices = (await accounts.Devices(user.UserName(), cancel)).Count;
             object? counts = null;
             if (IsAdmin(user))
@@ -167,7 +168,7 @@ public static class WebEndpoints
                 var all = await admin.Counts(cancel);
                 counts = new { users = all.Users, boards = all.Boards, devices = all.Devices, templates = (await admin.Templates(cancel)).Count };
             }
-            return Results.Ok(new { origin, link, qr = Qr.Svg(link), shortPin = address.ShortPin, devices, counts });
+            return Results.Ok(new { origin, link, qr = Qr.Svg(link), shortPin = address.ShortPinFor(context.Request), devices, counts });
         });
 
         web.MapGet("/devices", async (ClaimsPrincipal user, AccountService accounts, CancellationToken cancel) =>
@@ -254,7 +255,7 @@ public static class WebEndpoints
                 email = await service.ContactEmail(cancel),
                 origin = address.Origin(context.Request),
                 lan = address.Mode == AddressMode.Lan,
-                shortPin = address.ShortPin,
+                shortPin = address.ShortPinFor(context.Request),
                 version = Version,
                 users = counts.Users,
                 devices = counts.Devices,

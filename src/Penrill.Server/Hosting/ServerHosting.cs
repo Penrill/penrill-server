@@ -47,7 +47,7 @@ public static class ServerHosting
             address = new ServerAddress(AddressMode.Lan, "", port, certificate);
             // Visitors use whatever name or address reaches this machine; links are built from the request or the LAN address.
             configuration["AllowedHosts"] = "*";
-            builder.WebHost.ConfigureKestrel(kestrel => kestrel.ListenAnyIP(port, listen => listen.UseHttps(certificate.Certificate)));
+            builder.WebHost.ConfigureKestrel(kestrel => kestrel.ListenAnyIP(port, listen => listen.UseHttps(https => https.ServerCertificateSelector = (_, host) => certificate.SelectCertificate(host))));
         }
         else
         {
@@ -73,6 +73,11 @@ public static class ServerHosting
         services.AddSingleton(address);
         services.AddSingleton<IPublicAddress>(address);
         services.AddSingleton(new ConnectLinks(configuration["PENRILL_CONNECT_PAGE"] is { Length: > 0 } page ? page : ConnectLinks.DefaultPage));
+        services.AddSingleton<DesecClient>();
+        services.AddSingleton<DuckDnsClient>();
+        services.AddSingleton<AcmeClient>();
+        services.AddSingleton<DomainManager>();
+        services.AddHostedService(provider => provider.GetRequiredService<DomainManager>());
         services.AddSingleton<SetupAnnouncer>();
         services.AddHostedService(provider => provider.GetRequiredService<SetupAnnouncer>());
         services.AddHostedService(provider => new AdminSocketPermissions(socket, provider.GetRequiredService<IHostApplicationLifetime>()));

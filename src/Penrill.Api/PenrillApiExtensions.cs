@@ -53,10 +53,12 @@ public static class PenrillApiExtensions
         // above would be one shared bucket. With PENRILL_TRUST_PROXY the proxy's X-Forwarded-For/-Proto are believed, from loopback only.
         services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
             options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto);
-        // Penrill in the browser lives on app.penrill.com (penrill.com/app before); the rest are local development editors.
-        var origins = builder.Configuration["PENRILL_EDITOR_ORIGINS"] ?? "https://app.penrill.com,https://penrill.com,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173";
+        // Penrill in the browser lives on app.penrill.com (and penrill.com); the rest are local development editors.
+        const string defaultOrigins = "https://app.penrill.com,https://penrill.com,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5173";
+        var extraOrigins = builder.Configuration["PENRILL_EDITOR_ORIGINS"];
+        var origins = string.IsNullOrWhiteSpace(extraOrigins) ? defaultOrigins : $"{defaultOrigins},{extraOrigins}";
         services.AddCors(options => options.AddDefaultPolicy(policy => policy
-            .WithOrigins(origins.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+            .WithOrigins(origins.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
             .WithMethods("GET", "PUT", "POST", "DELETE")
             .WithHeaders("Content-Type", "Authorization")));
         return builder;
