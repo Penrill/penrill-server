@@ -3,7 +3,7 @@
 # ARCHES defaults to "amd64 arm64". Needs the .NET 10 SDK and dpkg-deb (or python3 on macOS).
 set -eu
 repo=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
-version=${1:-0.3.4}
+version=${1:-0.3.5}
 if command -v dpkg >/dev/null 2>&1; then
     dpkg --validate-version "$version"
 fi

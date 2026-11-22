@@ -155,7 +155,7 @@ public static class InteractiveConfigurator
                 Console.WriteLine($"  {marker} {TerminalUi.Bold}{net.Label,-26}{TerminalUi.Reset} {TerminalUi.Cyan}{net.Origin}{TerminalUi.Reset}");
             }
             Console.WriteLine();
-            Console.WriteLine($"  {TerminalUi.Bold}Penrill Web App Connect Links (app.penrill.com):{TerminalUi.Reset}");
+            Console.WriteLine($"  {TerminalUi.Bold}Penrill Connect Links (penrill.com/connect):{TerminalUi.Reset}");
             Console.WriteLine();
             for (var i = 0; i < nets.Count; i++)
             {
@@ -180,7 +180,7 @@ public static class InteractiveConfigurator
                 if (i != activeIndex || useAppLink)
                     switchOpts.Add(new($"🌐 Show Server Web Panel QR for {nets[i].Label}", $"panel:{i}", nets[i].Origin));
                 if (i != activeIndex || !useAppLink)
-                    switchOpts.Add(new($"📱 Show Penrill App Connect QR for {nets[i].Label}", $"app:{i}", "app.penrill.com/connect"));
+                    switchOpts.Add(new($"📱 Show Penrill App Connect QR for {nets[i].Label}", $"app:{i}", "penrill.com/connect"));
             }
             switchOpts.Add(new("← Back to main menu", "back"));
 
@@ -736,7 +736,7 @@ public static class InteractiveConfigurator
         var origins = TerminalUi.Prompt(
             "Extra web editor CORS origins (optional, comma-separated)",
             defaultValue: "",
-            placeholder: "leave empty for default app.penrill.com");
+            placeholder: "leave empty for default penrill.com");
         if (origins is null) return;
 
         Console.WriteLine();

@@ -230,7 +230,7 @@ public static class AdminCommands
         foreach (var net in nets)
             sb.AppendLine($"  • {net.Label,-24} {net.Origin}");
         sb.AppendLine();
-        sb.AppendLine("Connect in Penrill Web App (app.penrill.com):");
+        sb.AppendLine("Connect in Penrill (penrill.com/connect):");
         sb.AppendLine();
         foreach (var net in nets)
             sb.AppendLine($"  • {net.Label,-24} {links.For(net.Origin, address.Pin)}");

@@ -229,14 +229,14 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
 }
 
 /// <summary>
-/// The link that connects Penrill to this server. It goes to the connect page on app.penrill.com, which
+/// The link that connects Penrill to this server. It goes to the connect page on penrill.com, which
 /// knows what the visitor has: it opens the app, offers Penrill in the browser, or offers a download.
 /// The server only knows its own address. The address travels in the fragment, so it never reaches
-/// app.penrill.com. Development points <c>PENRILL_CONNECT_PAGE</c> at a local web editor instead.
+/// penrill.com. Development points <c>PENRILL_CONNECT_PAGE</c> at a local web editor instead.
 /// </summary>
 public sealed class ConnectLinks(string page)
 {
-    public const string DefaultPage = "https://app.penrill.com/connect";
+    public const string DefaultPage = "https://penrill.com/connect";
 
     public string For(string origin, string? pin) =>
         page.Split('#')[0] + "#server=" + Uri.EscapeDataString(origin) + (pin is null ? "" : "&pin=" + Uri.EscapeDataString(pin));
