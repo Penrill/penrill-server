@@ -33,16 +33,7 @@ sudo apt install penrill-server
 
 Future updates are installed automatically alongside your system packages via `sudo apt update && sudo apt upgrade`.
 
-### Option 2: Install via Snap
-
-On any Linux distribution with `snapd` enabled (Ubuntu, Raspberry Pi OS, Debian):
-
-```sh
-sudo snap install penrill-server
-sudo penrill-server setup
-```
-
-### Option 3: Install a `.deb` Package Manually
+### Option 2: Install a `.deb` Package Manually
 
 Download the `.deb` package for your architecture (`arm64` for Raspberry Pi, `amd64` for x86_64) from [GitHub Releases](https://github.com/Penrill/penrill-server/releases/latest) and install it with `apt`:
 
@@ -132,22 +123,20 @@ By default, the installed service listens on port **`5081`** with TLS on all net
 | Installation | Data Directory (persists across upgrades) | Admin Socket | Service Logs |
 | :--- | :--- | :--- | :--- |
 | **APT / `.deb`** | `/var/lib/penrill-server` | `/run/penrill-server/admin.sock` | `journalctl -u penrill-server -f` |
-| **Snap** | `/var/snap/penrill-server/common` | `/var/snap/penrill-server/common/admin.sock` | `sudo snap logs -f penrill-server` |
 
 ### Configuration Options
 
-| Environment Variable | Snap Key (`snap set`) | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `PENRILL_PORT` | `port` | `5081` | TCP port the server listens on |
-| `PENRILL_ADDRESS_MODE` | `address-mode` | `lan` (`local` in dev) | `lan` enables HTTPS on all interfaces; `local` binds HTTP on loopback (e.g. behind a reverse proxy) |
-| `PENRILL_EDITOR_ORIGINS` | `editor-origins` | *(none)* | Comma-separated extra CORS origins allowed to connect (for self-hosted web editors) |
-| `PENRILL_OPEN_REGISTRATION` | `open-registration` | `false` | Set to `true` to allow open registration without invite links |
-| `PENRILL_TRUST_PROXY` | — | `false` | Set to `true` behind a reverse proxy on this machine: believes its `X-Forwarded-For`/`-Proto` (from loopback only), so rate limits count each visitor instead of the proxy |
-| `PENRILL_DATA_DIR` | *(managed by snap)* | `/var/lib/penrill-server` | Directory where `boards.db`, assets, and TLS keys are stored |
-| `PENRILL_CONNECT_PAGE` | — | `https://penrill.com/connect` | Base URL used when generating device connect links |
+| Environment Variable | Default | Description |
+| :--- | :--- | :--- |
+| `PENRILL_PORT` | `5081` | TCP port the server listens on |
+| `PENRILL_ADDRESS_MODE` | `lan` (`local` in dev) | `lan` enables HTTPS on all interfaces; `local` binds HTTP on loopback (e.g. behind a reverse proxy) |
+| `PENRILL_EDITOR_ORIGINS` | *(none)* | Comma-separated extra CORS origins allowed to connect (for self-hosted web editors) |
+| `PENRILL_OPEN_REGISTRATION` | `false` | Set to `true` to allow open registration without invite links |
+| `PENRILL_TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy on this machine: believes its `X-Forwarded-For`/`-Proto` (from loopback only), so rate limits count each visitor instead of the proxy |
+| `PENRILL_DATA_DIR` | `/var/lib/penrill-server` | Directory where `boards.db`, assets, and TLS keys are stored |
+| `PENRILL_CONNECT_PAGE` | `https://penrill.com/connect` | Base URL used when generating device connect links |
 
 - **On APT / systemd:** Run `sudo systemctl edit penrill-server` and add `Environment="PENRILL_EDITOR_ORIGINS=https://draw.example.com"` under `[Service]`, then `sudo systemctl restart penrill-server`.
-- **On Snap:** Run `sudo snap set penrill-server port=5081` or `sudo snap set penrill-server editor-origins="https://draw.example.com"`.
 
 ---
 
@@ -164,20 +153,15 @@ By default, the installed service listens on port **`5081`** with TLS on all net
   ```sh
   sh packaging/build-apt-repo.sh dist dist/apt-repo
   ```
-- **Snap package (`.snap`):**
-  ```sh
-  snapcraft pack
-  ```
 
 ### Automated Releases (GitHub Actions)
 
 Pushing a tag matching `v*` (e.g. `git tag v0.3.0 && git push origin v0.3.0`) or running the **Release Packages (APT & Snap)** workflow manually in GitHub Actions will:
 
 1. Run the test suite.
-2. Build self-contained `.deb` and `.snap` packages for both `arm64` (Raspberry Pi) and `amd64`.
-3. Publish a GitHub Release with all `.deb`, `.snap`, and `SHA256SUMS` artifacts.
+2. Build self-contained `.deb` packages for both `arm64` (Raspberry Pi) and `amd64`.
+3. Publish a GitHub Release with the `.deb` and `SHA256SUMS` artifacts.
 4. Build and deploy the APT repository to GitHub Pages.
-5. Publish the `.snap` packages to the Snap Store if `SNAPCRAFT_STORE_CREDENTIALS` is configured in repository secrets.
 
 Optional repository secrets:
 - `GPG_PRIVATE_KEY` (and `GPG_PASSPHRASE` if encrypted): Signs the APT repository (`InRelease`, `Release.gpg`, and `penrill-archive-keyring.gpg`).

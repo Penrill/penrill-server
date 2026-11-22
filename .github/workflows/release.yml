@@ -76,6 +76,8 @@ jobs:
 
   snap:
     name: Build .snap (${{ matrix.arch }})
+    # Snap is switched off for now; delete this line to publish it again (publish must then need it too).
+    if: false
     needs: prepare
     runs-on: ${{ matrix.runner }}
     env:
@@ -125,7 +127,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release & Build APT Repo
-    needs: [prepare, deb, snap]
+    needs: [prepare, deb]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -163,7 +165,12 @@ jobs:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
-          # A release without a signing key would publish an unsigned APT repository; the script refuses that.
+          # The script refuses to build an unsigned APT repository. Until the GPG_PRIVATE_KEY secret is
+          # added, allow it explicitly (with a warning); once the secret exists the repository is signed.
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::warning::GPG_PRIVATE_KEY is not set: publishing an UNSIGNED APT repository"
+            export ALLOW_UNSIGNED=1
+          fi
           owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
           repo="${GITHUB_REPOSITORY#*/}"
           sh packaging/build-apt-repo.sh dist dist/apt-repo "https://${owner}.github.io/${repo}"
