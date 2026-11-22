@@ -33,16 +33,7 @@ sudo apt install penrill-server
 
 Future updates are installed automatically alongside your system packages via `sudo apt update && sudo apt upgrade`.
 
-### Option 2: Install via Snap
-
-On any Linux distribution with `snapd` enabled (Ubuntu, Raspberry Pi OS, Debian):
-
-```sh
-sudo snap install penrill-server
-sudo penrill-server setup
-```
-
-### Option 3: Install a `.deb` Package Manually
+### Option 2: Install a `.deb` Package Manually
 
 Download the `.deb` package for your architecture (`arm64` for Raspberry Pi, `amd64` for x86_64) from [GitHub Releases](https://github.com/Penrill/penrill-server/releases/latest) and install it with `apt`:
 
@@ -132,7 +123,6 @@ By default, the installed service listens on port **`5081`** with TLS on all net
 | Installation | Data Directory (persists across upgrades) | Admin Socket | Service Logs |
 | :--- | :--- | :--- | :--- |
 | **APT / `.deb`** | `/var/lib/penrill-server` | `/run/penrill-server/admin.sock` | `journalctl -u penrill-server -f` |
-| **Snap** | `/var/snap/penrill-server/common` | `/var/snap/penrill-server/common/admin.sock` | `sudo snap logs -f penrill-server` |
 
 ### Configuration Options
 

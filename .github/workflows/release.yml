@@ -76,6 +76,8 @@ jobs:
 
   snap:
     name: Build .snap (${{ matrix.arch }})
+    # Snap is switched off for now; delete this line to publish it again (publish must then need it too).
+    if: false
     needs: prepare
     runs-on: ${{ matrix.runner }}
     env:
@@ -125,7 +127,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release & Build APT Repo
-    needs: [prepare, deb, snap]
+    needs: [prepare, deb]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
