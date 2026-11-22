@@ -3,7 +3,8 @@
 Self-hosted board synchronization and sharing server for [Penrill](https://penrill.com). Keeps your boards in sync across devices and lets you collaborate with your team or classroom on your own hardware (such as a Raspberry Pi or home/school server).
 
 - **License:** [FSL-1.1-MIT](LICENSE)
-- **Specs:** `docs/CONNECT.md` (in the editor repository) · [Wire Protocol](docs/PROTOCOL.md)
+- **Specs:** `docs/CONNECT.md` (in the editor repository) · [Editor API](docs/API.md) · [Wire Protocol](docs/PROTOCOL.md)
+- **Architecture:** [Overview](docs/ARCHITECTURE.md) · [Extending](docs/EXTENDING.md) · [Decisions](docs/decisions/README.md)
 
 ---
 
@@ -103,7 +104,7 @@ sudo penrill-server invite --admin --days 14
   ```sh
   sudo penrill-server reset-password USERNAME
   ```
-- **Pre-account boards:** Boards created on older server versions before accounts were introduced can be assigned an owner in **Admin › Boards**.
+- **Boards without an owner:** When an account is deleted, its boards stay; give them a new owner in **Admin › Boards**.
 
 ---
 
@@ -158,7 +159,7 @@ By default, the installed service listens on port **`5081`** with TLS on all net
 | `PENRILL_EDITOR_ORIGINS` | `https://app.penrill.com,https://penrill.com` and local dev editors | Comma-separated CORS origins of extra web editors allowed to connect. They are added to the default list |
 | `PENRILL_OPEN_REGISTRATION` | `false` | Set to `true` to allow open registration without invite links |
 | `PENRILL_TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy on this machine: believes its `X-Forwarded-For`/`-Proto` (from loopback only), so rate limits count each visitor instead of the proxy |
-| `PENRILL_DATA_DIR` | `/var/lib/penrill-server` | Directory where `boards.db`, assets, and TLS keys are stored |
+| `PENRILL_DATA_DIR` | `/var/lib/penrill-server` | Directory where the database (`penrill.db`), images (`assets`) and TLS keys are stored |
 | `PENRILL_CONNECT_PAGE` | `https://penrill.com/connect` | Base URL used when generating device connect links |
 
 - **On APT / systemd:** Run `sudo systemctl edit penrill-server` and add `Environment="PENRILL_EDITOR_ORIGINS=https://draw.example.com"` under `[Service]`, then `sudo systemctl restart penrill-server`.
@@ -199,22 +200,32 @@ Optional repository secrets:
 Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ```sh
-# Run the server locally on http://127.0.0.1:5081 (SQLite data in src/Penrill.Server/data)
-dotnet run --project src/Penrill.Server
+# Run the server locally on http://127.0.0.1:5081 (SQLite data in src/Server/data)
+dotnet run --project src/Server
+
+# Or with the Aspire dashboard (logs, traces, metrics) and open registration
+aspire run --project src/AppHost
 
 # Run the test suite
-dotnet test
+dotnet test Penrill.slnx
 ```
+
+The code follows the Clean Architecture solution template; start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Its core (Domain, Application, Infrastructure, Web) is shared with Penrill Cloud as NuGet packages; see
+[docs/EXTENDING.md](docs/EXTENDING.md).
+
+MediatR is held at 12.5.0, its last Apache-2.0 release, and AutoMapper is not used; see
+[ADR-008](docs/decisions/ADR-008-Free-MediatR-And-AutoMapper.md) before changing either.
 
 ### Web UI (`wwwroot`)
 
-The server's web pages (setup, sign-in, device approval, account, and administration) are a React single-page app located in the main Penrill repository under `apps/server`, talking to the JSON API in `src/Penrill.Server/Web`.
+The server's web pages (setup, sign-in, device approval, account, and administration) are a React single-page app located in the main Penrill repository under `apps/server`, talking to the JSON API in `src/Server/Web`.
 
-Its production build is committed to `src/Penrill.Server/wwwroot`, so this repository builds and ships without requiring Node.js. To develop the web UI:
+Its production build is committed to `src/Server/wwwroot`, so this repository builds and ships without requiring Node.js. To develop the web UI:
 
 1. Check out the `penrill` repository next to `penrill-server`.
-2. Start `penrill-server` (`dotnet run --project src/Penrill.Server`).
-3. In the `penrill` repository, run `npm run dev:server-ui` (opens on `http://localhost:5175`), and `npm run build:server-ui` to update `src/Penrill.Server/wwwroot`.
+2. Start `penrill-server` (`dotnet run --project src/Server`).
+3. In the `penrill` repository, run `npm run dev:server-ui` (opens on `http://localhost:5175`), and `npm run build:server-ui` to update `src/Server/wwwroot`.
 
 ---
 

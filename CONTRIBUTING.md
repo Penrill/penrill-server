@@ -10,9 +10,12 @@ the server version (`penrill-server --version`), your system and how you install
 Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 
 ```sh
-dotnet run --project src/Penrill.Server   # the server on http://127.0.0.1:5081
-dotnet test                               # run before every commit
+dotnet run --project src/Server   # the server on http://127.0.0.1:5081
+dotnet test Penrill.slnx          # run before every commit
 ```
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing code, and [docs/EXTENDING.md](docs/EXTENDING.md)
+before changing anything Penrill Cloud builds on. The editor API in [docs/API.md](docs/API.md) only grows.
 
 The server's web pages live in the main [Penrill](https://github.com/Penrill/penrill) repository
 under `apps/server`; see the Development section of the [README](README.md#web-ui-wwwroot).

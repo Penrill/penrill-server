@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Penrill.Domain</RootNamespace>
+    <AssemblyName>Penrill.Domain</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <Description>Penrill board model: entities, the change format and its rules. Shared by Penrill Server and Penrill Cloud.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MediatR.Contracts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Penrill.Domain.UnitTests" />
+  </ItemGroup>
+
+</Project>

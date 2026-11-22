@@ -1,0 +1,17 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.5">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Penrill.AppHost</RootNamespace>
+    <AssemblyName>Penrill.AppHost</AssemblyName>
+    <!-- The dashboard and orchestrator come as packages, so building needs no Aspire CLI. `aspire run` works either way. -->
+    <AspireUseCliBundle>false</AspireUseCliBundle>
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Shared\Shared.csproj" IsAspireProjectResource="false" />
+    <ProjectReference Include="..\Server\Penrill.Server.csproj" />
+  </ItemGroup>
+
+</Project>

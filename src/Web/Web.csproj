@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Penrill.Web</RootNamespace>
+    <AssemblyName>Penrill.Web</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <Description>The Penrill HTTP API every host serves under /api: endpoint groups, bearer sessions, the live WebSocket, rate limits and CORS.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Application\Application.csproj" />
+  </ItemGroup>
+
+</Project>
