@@ -35,6 +35,8 @@ public interface IBoardStore
     Task<BoardAccess> Delete(string board, string user, CancellationToken cancel);
     Task AddAsset(string board, AssetInfo asset, CancellationToken cancel);
     Task<AssetInfo?> FindAsset(string board, string hash, CancellationToken cancel);
+    /// <summary>The size of every image attached to the board.</summary>
+    Task<long> AssetBytes(string board, CancellationToken cancel);
 }
 
 public interface IBoardAccess

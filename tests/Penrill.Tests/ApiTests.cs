@@ -8,6 +8,8 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
+using Penrill.Core.Boards;
 
 namespace Penrill.Tests;
 
@@ -320,5 +322,89 @@ public sealed class ApiTests : IDisposable
         Assert.Equal(hash, (string)snapshot!["items"]![0]!["asset"]!);
         Assert.Equal("grid", (string)snapshot["background"]!);
         Assert.Equal(image, await client.GetByteArrayAsync($"/api/boards/{Board}/assets/{hash}"));
+    }
+
+    /// <summary>Joins the board by its draw link as a new guest and returns the guest's client and token.</summary>
+    private async Task<(HttpClient Client, string Token)> JoinByLink(HttpClient owner, string name)
+    {
+        var link = await (await owner.PostAsync($"/api/boards/{Board}/link", null)).Content.ReadFromJsonAsync<JsonObject>();
+        var joined = await factory.CreateClient().PostAsJsonAsync("/api/join", new { token = (string)link!["token"]!, name });
+        joined.EnsureSuccessStatusCode();
+        var token = (string)(await joined.Content.ReadFromJsonAsync<JsonObject>())!["token"]!;
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        return (client, token);
+    }
+
+    [Fact]
+    public async Task GuestsOfADrawLinkWorkOnThatBoardAndMakeNothingElse()
+    {
+        var (ann, _) = await SignUp("ann");
+        await CreateBoard(ann);
+        var (guest, _) = await JoinByLink(ann, "Visitor");
+
+        Assert.Equal(HttpStatusCode.OK, (await guest.GetAsync($"/api/boards/{Board}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await guest.PostAsync($"/api/boards/{Board}/changes", new StringContent(Put("g1", "seed"), Encoding.UTF8, "application/json"))).StatusCode);
+        var other = "ffeeddccbbaa99887766554433221100";
+        var make = await guest.PutAsync($"/api/boards/{other}", JsonContent.Create(new { title = "Mine", background = "grid", items = Array.Empty<object>() }));
+        Assert.Equal(HttpStatusCode.Forbidden, make.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await guest.PostAsJsonAsync("/api/folders", new { name = "Everyone" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await guest.PostAsync("/api/templates?name=Spam", JsonContent.Create(new { format = "inkboard", version = 1, items = Array.Empty<object>() }))).StatusCode);
+        Assert.DoesNotContain((await guest.GetFromJsonAsync<JsonArray>("/api/boards"))!, board => (string)board!["id"]! == other);
+        Assert.Empty((await ann.GetFromJsonAsync<JsonObject>("/api/community"))!["templates"]!.AsArray());
+    }
+
+    [Fact]
+    public async Task TurningOffTheDrawLinkDisconnectsGuestsAlreadyOnTheBoard()
+    {
+        var (ann, _) = await SignUp("ann");
+        await CreateBoard(ann);
+        var (_, guestToken) = await JoinByLink(ann, "Visitor");
+        var socket = await Connect(guestToken, null);
+        await NextOf(socket, "snapshot");
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync($"/api/boards/{Board}/link")).StatusCode);
+        while (await Next(socket) is not null) { }
+        Assert.Equal((WebSocketCloseStatus)4403, socket.CloseStatus);
+    }
+
+    [Fact]
+    public async Task TakingSomeoneOffABoardDisconnectsThemButNotTheOthers()
+    {
+        var (ann, annToken) = await SignUp("ann");
+        var (_, bobToken) = await SignUp("bob");
+        var (_, cidToken) = await SignUp("cid");
+        await CreateBoard(ann);
+        foreach (var name in new[] { "bob", "cid" })
+            Assert.Equal(HttpStatusCode.NoContent, (await ann.PostAsJsonAsync($"/api/boards/{Board}/people", new { name })).StatusCode);
+        var bob = await Connect(bobToken, null);
+        var cid = await Connect(cidToken, null);
+        var owner = await Connect(annToken, null);
+        await NextOf(bob, "snapshot");
+        await NextOf(cid, "snapshot");
+        await NextOf(owner, "snapshot");
+
+        Assert.Equal(HttpStatusCode.NoContent, (await ann.DeleteAsync($"/api/boards/{Board}/people/bob")).StatusCode);
+        while (await Next(bob) is not null) { }
+        Assert.Equal((WebSocketCloseStatus)4403, bob.CloseStatus);
+
+        await Send(cid, """{"type":"ping"}""");
+        await NextOf(cid, "pong");
+        await Send(owner, """{"type":"ping"}""");
+        await NextOf(owner, "pong");
+    }
+
+    [Fact]
+    public async Task ImagesOnOneBoardStopAtTheBoardQuota()
+    {
+        var (ann, _) = await SignUp("ann");
+        await CreateBoard(ann);
+        await factory.Services.GetRequiredService<IBoardStore>().AddAsset(
+            Board, new AssetInfo(new string('a', 64), "image/png", BoardLimits.MaxBoardAssetBytes), default);
+        var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 1, 2, 3 };
+        var hash = Convert.ToHexStringLower(SHA256.HashData(png));
+        var content = new ByteArrayContent(png);
+        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await ann.PutAsync($"/api/boards/{Board}/assets/{hash}", content)).StatusCode);
     }
 }

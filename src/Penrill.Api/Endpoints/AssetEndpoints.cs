@@ -30,6 +30,8 @@ internal static class AssetEndpoints
         if (type is null || !ImageTypes.Contains(type)) return Results.StatusCode(StatusCodes.Status415UnsupportedMediaType);
         if (await Bodies.Read(request, BoardLimits.MaxAssetBytes, cancel) is not { } bytes) return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         if (Convert.ToHexStringLower(SHA256.HashData(bytes)) != hash) return Results.BadRequest(new { reason = "hash-mismatch" });
+        if (await store.FindAsset(id, hash, cancel) is null && await store.AssetBytes(id, cancel) + bytes.Length > BoardLimits.MaxBoardAssetBytes)
+            return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
         if (!await assets.Exists(hash, cancel)) await assets.Save(hash, bytes, cancel);
         await store.AddAsset(id, new AssetInfo(hash, type, bytes.Length), cancel);
         PenrillTelemetry.AssetBytes.Add(bytes.Length);

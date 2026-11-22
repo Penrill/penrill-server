@@ -74,6 +74,22 @@ public sealed class RoomRegistry(IBoardStore store, RoomOptions options, TimePro
         if (room is not null) await room.Close(LiveCloseReason.NotFound);
     }
 
+    /// <summary>
+    /// After people lost access to a board (taken off it, or its draw link turned off): disconnects whoever is on its
+    /// open room and may no longer use it. Access is checked once when a socket connects, so this is what ends the ones already open.
+    /// </summary>
+    public async Task Recheck(string boardId, IBoardAccess access, CancellationToken cancel)
+    {
+        Entry? entry;
+        lock (sync)
+        {
+            if (!rooms.TryGetValue(boardId, out entry)) return;
+        }
+        if (!entry.Room.IsCompletedSuccessfully || entry.Room.Result is not { } room) return;
+        foreach (var member in room.Members())
+            if (await access.Check(member.User, boardId, cancel) != BoardAccess.Allowed) member.Close(LiveCloseReason.Forbidden);
+    }
+
     public async Task CloseAll()
     {
         BoardRoom[] open;

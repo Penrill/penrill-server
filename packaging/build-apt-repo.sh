@@ -164,6 +164,13 @@ if [ -n "${GPG_PRIVATE_KEY:-}" ] || [ -n "${GPG_KEY_ID:-}" ]; then
     signed=1
 fi
 
+# An unsigned repository makes people install with [trusted=yes], which lets anyone who can tamper with the download replace the package.
+# A release must not end up like that because a secret went missing: set ALLOW_UNSIGNED=1 to build one on purpose (local testing).
+if [ "$signed" -ne 1 ] && [ "${ALLOW_UNSIGNED:-}" != "1" ]; then
+    echo "No signing key: set GPG_PRIVATE_KEY (or GPG_KEY_ID), or ALLOW_UNSIGNED=1 for an unsigned test repository." >&2
+    exit 1
+fi
+
 : > "$out/.nojekyll"
 
 if [ "$signed" -eq 1 ]; then
@@ -181,14 +188,7 @@ else
     cat > "$out/install.sh" <<INSTALL
 #!/bin/sh
 set -eu
-if curl -fsSLI $repo_url/penrill-archive-keyring.gpg >/dev/null 2>&1; then
-    mkdir -p /usr/share/keyrings
-    curl -fsSL $repo_url/penrill-archive-keyring.gpg -o /usr/share/keyrings/penrill-archive-keyring.gpg
-    chmod 644 /usr/share/keyrings/penrill-archive-keyring.gpg
-    echo "deb [signed-by=/usr/share/keyrings/penrill-archive-keyring.gpg] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
-else
-    echo "deb [trusted=yes] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
-fi
+echo "deb [trusted=yes] $repo_url stable main" > /etc/apt/sources.list.d/penrill.list
 apt-get update
 apt-get install -y penrill-server
 INSTALL
