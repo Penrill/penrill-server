@@ -130,13 +130,13 @@ By default, the installed service listens on port **`5081`** with TLS on all net
 | :--- | :--- | :--- |
 | `PENRILL_PORT` | `5081` | TCP port the server listens on |
 | `PENRILL_ADDRESS_MODE` | `lan` (`local` in dev) | `lan` enables HTTPS on all interfaces; `local` binds HTTP on loopback (e.g. behind a reverse proxy) |
-| `PENRILL_EDITOR_ORIGINS` | *(none)* | Comma-separated extra CORS origins allowed to connect (for self-hosted web editors) |
+| `PENRILL_EDITOR_ORIGINS` | `https://app.penrill.com,https://penrill.com` and local dev editors | Comma-separated CORS origins of web editors allowed to connect. Replaces the default list, so keep `https://app.penrill.com` when adding your own |
 | `PENRILL_OPEN_REGISTRATION` | `false` | Set to `true` to allow open registration without invite links |
 | `PENRILL_TRUST_PROXY` | `false` | Set to `true` behind a reverse proxy on this machine: believes its `X-Forwarded-For`/`-Proto` (from loopback only), so rate limits count each visitor instead of the proxy |
 | `PENRILL_DATA_DIR` | `/var/lib/penrill-server` | Directory where `boards.db`, assets, and TLS keys are stored |
 | `PENRILL_CONNECT_PAGE` | `https://penrill.com/connect` | Base URL used when generating device connect links |
 
-- **On APT / systemd:** Run `sudo systemctl edit penrill-server` and add `Environment="PENRILL_EDITOR_ORIGINS=https://draw.example.com"` under `[Service]`, then `sudo systemctl restart penrill-server`.
+- **On APT / systemd:** Run `sudo systemctl edit penrill-server` and add `Environment="PENRILL_EDITOR_ORIGINS=https://app.penrill.com,https://draw.example.com"` under `[Service]`, then `sudo systemctl restart penrill-server`.
 
 ---
 
