@@ -29,7 +29,7 @@ public sealed record CliContext(string[] Args, IServiceProvider Services, Cancel
         {
             if (Args[i].StartsWith("--", StringComparison.Ordinal))
             {
-                if (Args[i] is "--uses" or "--days" or "--revoke" or "--password" or "--owner" or "--delete" or "--role" or "--set") i++;
+                if (Args[i] is "--uses" or "--days" or "--revoke" or "--password" or "--owner" or "--delete" or "--role" or "--set" or "--desec" or "--token" or "--email" or "--cert" or "--key") i++;
                 continue;
             }
             if (pos == index) return Args[i];
@@ -46,7 +46,7 @@ public sealed record CliUserDto(string Name, string Role, bool Disabled, DateTim
 public sealed record CliDeviceDto(string Id, string User, string Name, DateTimeOffset Created, DateTimeOffset? LastUsed);
 public sealed record CliBoardDto(string Id, string Title, string Owner, long Seq, DateTimeOffset Updated);
 public sealed record CliInviteDto(string Id, string Role, int UsesLeft, DateTimeOffset? Expires, string CreatedBy);
-public sealed record CliNetworkDto(string Label, string Kind, string Origin, bool DefaultEnabled);
+public sealed record CliNetworkDto(string Label, string Kind, string Origin, bool DefaultEnabled, bool TrustedSsl = false);
 
 public sealed record CliStateDto(
     string ServerName, string? Email, string Version, string Origin, string ConnectLink,
@@ -54,9 +54,12 @@ public sealed record CliStateDto(
     IReadOnlyList<CliNetworkDto> DiscoveredNetworks,
     IReadOnlyList<CliNetworkDto> ActiveNetworks,
     IReadOnlyList<CliUserDto> Users, IReadOnlyList<CliDeviceDto> Devices,
-    IReadOnlyList<CliBoardDto> Boards, IReadOnlyList<CliInviteDto> Invites);
+    IReadOnlyList<CliBoardDto> Boards, IReadOnlyList<CliInviteDto> Invites,
+    PublicDomainStatusDto? PublicDomain = null);
 
 public sealed record CliClaimRequest(string Name, string Password, string ServerName, string Email, string? Networks = null);
+public sealed record CliDesecDomainRequest(string Domain, string? Token, string? Email = null, string? Password = null, bool ForceRenew = false);
+public sealed record CliCustomCertRequest(string Domain, string FullChainPath, string PrivateKeyPath);
 
 public static class AdminCommands
 {
@@ -68,6 +71,7 @@ public static class AdminCommands
         new("status", "status", "Address, certificate, users and boards", Status),
         new("setup", "setup", "Print a new setup link while the server has no owner", Setup),
         new("link", "link", "Print server addresses, web panel links and QR code", Link),
+        new("domain", "domain [--desec DOMAIN --token TOKEN | --cert DOMAIN CHAIN KEY | --remove]", "Configure public domain, free *.dedyn.io DDNS & Let's Encrypt SSL", Domain),
         new("networks", "networks [--set URL1,URL2]", "List discovered and active networks (LAN, Tailscale, custom)", Networks),
         new("invite", "invite [--admin] [--uses N] [--days N]", "Print an invite link for a new account", Invite),
         new("users", "users", "List accounts", Users),
@@ -94,14 +98,14 @@ public static class AdminCommands
         foreach (var command in All)
             cli.MapPost("/" + command.Name, (string[] args, HttpContext http) => command.Run(new CliContext(args, http.RequestServices, http.RequestAborted)));
 
-        cli.MapGet("/json/state", async (AdminService admin, GrantService grants, ServerAddress address, ConnectLinks links, CancellationToken cancel) =>
+        cli.MapGet("/json/state", async (AdminService admin, GrantService grants, ServerAddress address, ConnectLinks links, DomainManager domainManager, CancellationToken cancel) =>
         {
             var savedNets = await admin.SelectedNetworks(cancel);
             var discovered = address.DiscoverEndpoints()
-                .Select(n => new CliNetworkDto(n.Label, n.Kind, n.Origin, n.DefaultEnabled))
+                .Select(n => new CliNetworkDto(n.Label, n.Kind, n.Origin, n.DefaultEnabled, address.PinFor(n.Origin) is null))
                 .ToList();
             var active = address.ActiveEndpoints(savedNets)
-                .Select(n => new CliNetworkDto(n.Label, n.Kind, n.Origin, n.DefaultEnabled))
+                .Select(n => new CliNetworkDto(n.Label, n.Kind, n.Origin, n.DefaultEnabled, address.PinFor(n.Origin) is null))
                 .ToList();
             var primaryOrigin = active.Count > 0 ? active[0].Origin : address.DefaultOrigin;
             var users = (await admin.Users(cancel))
@@ -116,12 +120,13 @@ public static class AdminCommands
             var invites = (await admin.Invites(cancel))
                 .Select(i => new CliInviteDto(i.Id, i.Subject.ToLowerInvariant(), i.UsesLeft, i.Expires, i.CreatedBy))
                 .ToList();
+            var publicDomain = await domainManager.GetStatusAsync(cancel, detectPublicIp: false);
             return Results.Ok(new CliStateDto(
                 await admin.ServerName(cancel),
                 await admin.ContactEmail(cancel),
-                typeof(AdminCommands).Assembly.GetName().Version?.ToString(3) ?? "0.3.3",
+                typeof(AdminCommands).Assembly.GetName().Version?.ToString(3) ?? "0.3.6",
                 primaryOrigin,
-                links.For(primaryOrigin, address.Pin),
+                links.For(primaryOrigin, address.PinFor(primaryOrigin)),
                 address.Pin,
                 address.ShortPin,
                 address.Mode == AddressMode.Lan,
@@ -132,7 +137,23 @@ public static class AdminCommands
                 users,
                 devices,
                 boards,
-                invites));
+                invites,
+                publicDomain));
+        });
+
+        cli.MapGet("/json/domain/status", async (DomainManager domainManager, CancellationToken cancel) =>
+            Results.Ok(await domainManager.GetStatusAsync(cancel, detectPublicIp: true)));
+
+        cli.MapPost("/json/domain/desec", async (CliDesecDomainRequest req, DomainManager domainManager, CancellationToken cancel) =>
+            Results.Ok(await domainManager.ConfigureDesecAsync(req.Domain, req.Token, req.Email, req.Password, req.ForceRenew, cancel)));
+
+        cli.MapPost("/json/domain/custom-cert", async (CliCustomCertRequest req, DomainManager domainManager, CancellationToken cancel) =>
+            Results.Ok(await domainManager.ConfigureCustomCertificateAsync(req.Domain, req.FullChainPath, req.PrivateKeyPath, cancel)));
+
+        cli.MapPost("/json/domain/remove", async (DomainManager domainManager, CancellationToken cancel) =>
+        {
+            await domainManager.RemoveDomainAsync(cancel);
+            return Results.Ok();
         });
 
         cli.MapPost("/json/claim", async (CliClaimRequest req, GrantService grants, AdminService admin, ServerAddress address, CancellationToken cancel) =>
@@ -233,17 +254,62 @@ public static class AdminCommands
         sb.AppendLine("Connect in Penrill (penrill.com/connect):");
         sb.AppendLine();
         foreach (var net in nets)
-            sb.AppendLine($"  • {net.Label,-24} {links.For(net.Origin, address.Pin)}");
+            sb.AppendLine($"  • {net.Label,-24} {links.For(net.Origin, address.PinFor(net.Origin))}");
         if (address.ShortPin is { } pin)
         {
             sb.AppendLine();
-            sb.AppendLine($"TLS Certificate Fingerprint: {pin}  ({address.Pin})");
+            sb.AppendLine($"TLS Certificate Fingerprint (LAN/Tailscale): {pin}  ({address.Pin})");
+        }
+        if (address.Certificate?.TrustedDomain is { } trustedDomain)
+        {
+            sb.AppendLine($"Public SSL Certificate ({trustedDomain}): {address.Certificate.TrustedIssuer ?? "Trusted CA"} (expires {address.Certificate.TrustedExpires:yyyy-MM-dd})");
         }
         sb.AppendLine();
         sb.AppendLine($"QR Code for {primary.Label} ({primary.Origin}):");
         sb.AppendLine();
         sb.Append(Qr.Terminal(primary.Origin));
         return await Text(sb.ToString());
+    }
+
+    private static async Task<IResult> Domain(CliContext c)
+    {
+        var dm = c.Get<DomainManager>();
+        if (c.Flag("--remove"))
+        {
+            await dm.RemoveDomainAsync(c.Cancel);
+            return await Text("Public domain configuration removed.");
+        }
+        if (c.Option("--desec") is { } desecDomain)
+        {
+            var token = c.Option("--token");
+            var email = c.Option("--email");
+            var password = c.Option("--password");
+            var res = await dm.ConfigureDesecAsync(desecDomain, token, email, password, c.Flag("--renew"), c.Cancel);
+            var sb = new StringBuilder();
+            foreach (var step in res.Steps)
+                sb.AppendLine($"  • {step}");
+            sb.AppendLine(res.Message);
+            return res.Ok ? await Text(sb.ToString()) : await Fail(sb.ToString());
+        }
+        if (c.Option("--cert") is { } certDomain)
+        {
+            var chainPath = c.Positional(0) ?? "";
+            var keyPath = c.Option("--key") ?? c.Positional(1) ?? "";
+            var res = await dm.ConfigureCustomCertificateAsync(certDomain, chainPath, keyPath, c.Cancel);
+            return res.Ok ? await Text(res.Message) : await Fail(res.Message);
+        }
+
+        var status = await dm.GetStatusAsync(c.Cancel, detectPublicIp: true);
+        var text = new StringBuilder();
+        text.AppendLine($"Public Domain:   {status.Domain ?? "(not configured)"}");
+        if (status.Origin is not null)
+            text.AppendLine($"Public Address:  {status.Origin}");
+        if (status.Provider is not null)
+            text.AppendLine($"Provider:        {status.Provider}");
+        text.AppendLine($"Public IPv4:     {status.PublicIp ?? "(unknown)"}");
+        text.AppendLine($"Local LAN IP:    {status.LocalIp}:{status.Port}");
+        text.AppendLine($"Trusted SSL:     {(status.HasTrustedCertificate ? $"Yes ({status.CertificateIssuer}, expires {status.CertificateExpires:yyyy-MM-dd})" : "No")}");
+        return await Text(text.ToString());
     }
 
     private static async Task<IResult> Networks(CliContext c)

@@ -24,12 +24,28 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
 
     public int Port => port;
 
+    public ServerCertificate? Certificate => certificate;
+
     public string? Pin => certificate?.Pin;
 
     public string? ShortPin => certificate?.ShortPin;
 
-    /// <summary>The origin to print when there is no request to go by: the address this machine has on its network.</summary>
-    public string DefaultOrigin => mode == AddressMode.Lan ? $"https://{Bracket(PrimaryAddress())}:{port}" : localOrigin;
+    public string? PinFor(string? origin) =>
+        certificate is not null && certificate.IsTrustedOrigin(origin) ? null : Pin;
+
+    public string? PinFor(HttpRequest request) =>
+        certificate is not null && certificate.IsTrustedHost(request.Host.Host) ? null : Pin;
+
+    public string? ShortPinFor(HttpRequest request) =>
+        certificate is not null && certificate.IsTrustedHost(request.Host.Host) ? null : ShortPin;
+
+    public string? PublicDomainOrigin =>
+        mode == AddressMode.Lan && certificate?.TrustedDomain is { Length: > 0 } domain
+            ? (port == 443 ? $"https://{domain}" : $"https://{domain}:{port}")
+            : null;
+
+    /// <summary>The origin to print when there is no request to go by: the public domain if configured, otherwise the primary LAN address.</summary>
+    public string DefaultOrigin => PublicDomainOrigin ?? (mode == AddressMode.Lan ? $"https://{Bracket(PrimaryAddress())}:{port}" : localOrigin);
 
     /// <summary>Whatever name the visitor used to get here works for them, except loopback, which only works on this machine.</summary>
     public string Origin(HttpRequest request)
@@ -57,6 +73,9 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
                 list.Add(new NetworkEndpoint(label, kind, origin, defaultEnabled));
         }
 
+        if (PublicDomainOrigin is { } domainOrigin)
+            Add("Public Domain (SSL)", "domain", domainOrigin, true);
+
         var primaryIp = PrimaryAddress();
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
         {
@@ -79,14 +98,15 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
             }
         }
 
-        // Ensure primary LAN IP is first if discovered.
+        // Ensure primary LAN IP is first among LAN/VPN interfaces (right after Public Domain if configured).
+        var targetIndex = PublicDomainOrigin is not null ? 1 : 0;
         var primaryOrigin = $"https://{Bracket(primaryIp)}:{port}";
         var primaryIndex = list.FindIndex(e => string.Equals(e.Origin, primaryOrigin, StringComparison.OrdinalIgnoreCase));
-        if (primaryIndex > 0)
+        if (primaryIndex > targetIndex)
         {
             var item = list[primaryIndex];
             list.RemoveAt(primaryIndex);
-            list.Insert(0, item);
+            list.Insert(Math.Min(targetIndex, list.Count), item);
         }
         else if (primaryIndex < 0 && !IPAddress.IsLoopback(primaryIp))
         {
@@ -130,6 +150,23 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
                 active.Add(new NetworkEndpoint(ClassifyCustomOrigin(origin), "custom", origin, true));
         }
 
+        if (PublicDomainOrigin is { } domOrigin)
+        {
+            var existingIdx = active.FindIndex(a => string.Equals(a.Origin, domOrigin, StringComparison.OrdinalIgnoreCase));
+            var endpoint = byOrigin.TryGetValue(domOrigin, out var dMatch)
+                ? dMatch
+                : new NetworkEndpoint("Public Domain (SSL)", "domain", domOrigin, true);
+            if (existingIdx > 0)
+            {
+                active.RemoveAt(existingIdx);
+                active.Insert(0, endpoint);
+            }
+            else if (existingIdx < 0)
+            {
+                active.Insert(0, endpoint);
+            }
+        }
+
         return active.Count > 0 ? active : [discovered[0]];
     }
 
@@ -152,6 +189,7 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
     private static string ClassifyCustomOrigin(string origin)
     {
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return "Custom";
+        if (uri.Host.EndsWith(".dedyn.io", StringComparison.OrdinalIgnoreCase)) return "Public Domain (deSEC)";
         if (uri.Host.EndsWith(".ts.net", StringComparison.OrdinalIgnoreCase)) return "Tailscale MagicDNS";
         if (uri.Host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)) return "Local mDNS (.local)";
         if (IPAddress.TryParse(uri.Host.Trim('[', ']'), out var ip) && IsTailscale("", ip)) return "Tailscale";

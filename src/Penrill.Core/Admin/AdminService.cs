@@ -37,6 +37,12 @@ public static class SettingKeys
     public const string ContactEmail = "server.email";
     /// <summary>Comma-separated origins (LAN, Tailscale, mDNS, custom domain) enabled for connect and invite links.</summary>
     public const string Networks = "server.networks";
+    /// <summary>Configured public domain hostname (e.g. myboard.dedyn.io).</summary>
+    public const string DomainName = "server.domain.name";
+    /// <summary>Public domain provider ("desec" or "custom").</summary>
+    public const string DomainProvider = "server.domain.provider";
+    /// <summary>deSEC API token used for automatic DDNS updates and ACME DNS-01 renewals.</summary>
+    public const string DesecToken = "server.domain.desec_token";
 }
 
 /// <summary>
@@ -133,6 +139,20 @@ public sealed class AdminService(AccountService accounts, IAccountStore store, G
     public Task<string?> SelectedNetworks(CancellationToken cancel) => settings.Get(SettingKeys.Networks, cancel);
 
     public Task SetSelectedNetworks(string originsCsv, CancellationToken cancel) => settings.Set(SettingKeys.Networks, originsCsv, cancel);
+
+    public Task<string?> DomainName(CancellationToken cancel) => settings.Get(SettingKeys.DomainName, cancel);
+
+    public Task<string?> DomainProvider(CancellationToken cancel) => settings.Get(SettingKeys.DomainProvider, cancel);
+
+    public Task<string?> DesecToken(CancellationToken cancel) => settings.Get(SettingKeys.DesecToken, cancel);
+
+    public async Task SetDomainConfig(string? domain, string? provider, string? desecToken, CancellationToken cancel)
+    {
+        await settings.Set(SettingKeys.DomainName, (domain ?? "").Trim().ToLowerInvariant(), cancel);
+        await settings.Set(SettingKeys.DomainProvider, (provider ?? "").Trim().ToLowerInvariant(), cancel);
+        if (desecToken is not null)
+            await settings.Set(SettingKeys.DesecToken, desecToken.Trim(), cancel);
+    }
 
     public async Task<bool> SetContactEmail(string? email, CancellationToken cancel)
     {

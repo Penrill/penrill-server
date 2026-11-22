@@ -39,8 +39,12 @@ public static class InteractiveConfigurator
                 options.Add(new("⚡ Finish First-Time Setup", "setup", "Create the owner account and claim this server"));
 
             var netSummary = string.Join(", ", state.ActiveNetworks.Select(n => n.Label));
+            var domainSummary = state.PublicDomain?.Domain is { Length: > 0 } activeDom
+                ? $"{state.PublicDomain.Origin} ({(state.PublicDomain.HasTrustedCertificate ? "Trusted Let's Encrypt SSL" : "Configured")})"
+                : "Free *.dedyn.io domain + auto Let's Encrypt SSL for internet & guest sharing";
             options.AddRange([
                 new("🔗 Connect & Web Panel", "connect", $"Addresses & QR codes ({netSummary})"),
+                new("🌐 Public Domain & SSL (Guest Sharing)", "domain", domainSummary),
                 new("👥 Users & Passwords", "users", $"{state.Users.Count} account(s) — create, reset password, role, delete"),
                 new("✉️  Invites", "invites", $"{state.Invites.Count} active — create or revoke invite links"),
                 new("📱 Linked Devices", "devices", $"{state.Devices.Count} device(s) — view or revoke access"),
@@ -65,6 +69,9 @@ public static class InteractiveConfigurator
                     break;
                 case "connect":
                     await ShowConnectScreenAsync(state);
+                    break;
+                case "domain":
+                    await ManagePublicDomainAsync(http, state);
                     break;
                 case "users":
                     await ManageUsersAsync(http);
@@ -113,16 +120,22 @@ public static class InteractiveConfigurator
                 rows.Add((shortLabel + ":", $"{TerminalUi.Cyan}{net.Origin}{TerminalUi.Reset}"));
             }
         }
+        if (state.PublicDomain is { Domain: { Length: > 0 }, HasTrustedCertificate: true } pd)
+            rows.Add(("Public SSL:", $"{TerminalUi.Green}{pd.CertificateIssuer ?? "Trusted CA"} (expires {pd.CertificateExpires:yyyy-MM-dd}){TerminalUi.Reset}"));
         if (state.ShortPin is { } pin)
-            rows.Add(("Certificate:", pin));
+            rows.Add(("LAN Cert Pin:", pin));
         if (!string.IsNullOrEmpty(state.Email))
             rows.Add(("Email:", state.Email));
         rows.Add(("Owner:", ownerDisplay));
         rows.Add(("Resources:", $"{state.Users.Count} users · {state.Boards.Count} boards · {state.Devices.Count} devices"));
 
+        var modeBadge = state.PublicDomain is { HasTrustedCertificate: true }
+            ? "PUBLIC SSL · HTTPS"
+            : state.Lan ? "LAN · HTTPS" : "LOCAL · HTTP";
+
         TerminalUi.DrawBox(
             $"Penrill Server v{state.Version}",
-            state.Lan ? "LAN · HTTPS" : "LOCAL · HTTP",
+            modeBadge,
             rows);
     }
 
@@ -137,10 +150,10 @@ public static class InteractiveConfigurator
                 : [new CliNetworkDto("Server", "lan", state.Origin, true)];
             var current = nets[Math.Clamp(activeIndex, 0, nets.Count - 1)];
             var connectBase = state.ConnectLink.Split('#')[0];
-            string AppLinkOf(string origin) =>
-                connectBase + "#server=" + Uri.EscapeDataString(origin) + (state.Pin is null ? "" : "&pin=" + Uri.EscapeDataString(state.Pin));
+            string AppLinkOf(CliNetworkDto net) =>
+                connectBase + "#server=" + Uri.EscapeDataString(net.Origin) + (net.TrustedSsl || state.Pin is null ? "" : "&pin=" + Uri.EscapeDataString(state.Pin));
 
-            var qrUrl = useAppLink ? AppLinkOf(current.Origin) : current.Origin;
+            var qrUrl = useAppLink ? AppLinkOf(current) : current.Origin;
             var qrTitle = useAppLink ? $"Penrill App Connect ({current.Label})" : $"Server Web Panel ({current.Label})";
 
             TerminalUi.Header("Connect Penrill & Web Panel", $"{nets.Count} active network(s)");
@@ -152,7 +165,8 @@ public static class InteractiveConfigurator
             {
                 var net = nets[i];
                 var marker = i == activeIndex && !useAppLink ? $"{TerminalUi.Green}●{TerminalUi.Reset}" : " ";
-                Console.WriteLine($"  {marker} {TerminalUi.Bold}{net.Label,-26}{TerminalUi.Reset} {TerminalUi.Cyan}{net.Origin}{TerminalUi.Reset}");
+                var sslBadge = net.TrustedSsl ? $" {TerminalUi.Green}[Trusted SSL]{TerminalUi.Reset}" : "";
+                Console.WriteLine($"  {marker} {TerminalUi.Bold}{net.Label,-26}{TerminalUi.Reset} {TerminalUi.Cyan}{net.Origin}{TerminalUi.Reset}{sslBadge}");
             }
             Console.WriteLine();
             Console.WriteLine($"  {TerminalUi.Bold}Penrill Connect Links (penrill.com/connect):{TerminalUi.Reset}");
@@ -161,12 +175,12 @@ public static class InteractiveConfigurator
             {
                 var net = nets[i];
                 var marker = i == activeIndex && useAppLink ? $"{TerminalUi.Green}●{TerminalUi.Reset}" : " ";
-                Console.WriteLine($"  {marker} {TerminalUi.Bold}{net.Label,-26}{TerminalUi.Reset} {TerminalUi.Cyan}{AppLinkOf(net.Origin)}{TerminalUi.Reset}");
+                Console.WriteLine($"  {marker} {TerminalUi.Bold}{net.Label,-26}{TerminalUi.Reset} {TerminalUi.Cyan}{AppLinkOf(net)}{TerminalUi.Reset}");
             }
             if (state.ShortPin is { } pin)
             {
                 Console.WriteLine();
-                Console.WriteLine($"  {TerminalUi.Muted}TLS Certificate Fingerprint:{TerminalUi.Reset} {TerminalUi.Bold}{pin}{TerminalUi.Reset}  {TerminalUi.Muted}({state.Pin}){TerminalUi.Reset}");
+                Console.WriteLine($"  {TerminalUi.Muted}TLS Certificate Fingerprint (LAN/Tailscale):{TerminalUi.Reset} {TerminalUi.Bold}{pin}{TerminalUi.Reset}  {TerminalUi.Muted}({state.Pin}){TerminalUi.Reset}");
             }
             Console.WriteLine();
             Console.WriteLine($"  {TerminalUi.Bold}QR Code — {qrTitle}:{TerminalUi.Reset}");
@@ -254,6 +268,18 @@ public static class InteractiveConfigurator
 
         TerminalUi.Success($"Owner account '{AccountService.Normalize(username)}' created and server '{serverName}' is ready!");
         Console.WriteLine();
+
+        var (wantDomainOk, wantDomain) = TerminalUi.Select<string>(
+            "Would you like to connect a public domain & Let's Encrypt SSL now (for internet & guest board sharing)?",
+            [
+                new("⏭️  Skip for now (use LAN / Tailscale first)", "skip", "You can always set up a public domain later from the main menu"),
+                new("🌐 Yes — connect a free *.dedyn.io domain (deSEC + Auto Let's Encrypt SSL)", "desec", "Enables browser guest board sharing from anywhere on the internet")
+            ]);
+        if (wantDomainOk && wantDomain == "desec")
+        {
+            await RunDesecSetupWizardAsync(http, null);
+        }
+
         var updatedState = await FetchStateAsync(http);
         if (updatedState is not null)
             await ShowConnectScreenAsync(updatedState);
@@ -656,6 +682,7 @@ public static class InteractiveConfigurator
             var (selected, choice) = TerminalUi.Select<string>(
                 "Choose a setting to configure",
                 [
+                    new("🌐 Public Domain & SSL (deSEC *.dedyn.io / Custom)", "domain", fresh.PublicDomain?.Domain is { Length: > 0 } d ? $"Configured: {fresh.PublicDomain.Origin}" : "Not configured — local/VPN only"),
                     new("🌍 Select Active Networks (LAN, Tailscale, mDNS, Custom)", "networks", $"Active: {activeLabels}"),
                     new("✏️  Server display name", "rename", $"Current: {fresh.ServerName}"),
                     new("📧 Administrator contact email", "email", $"Current: {fresh.Email ?? "(not set)"}"),
@@ -665,7 +692,11 @@ public static class InteractiveConfigurator
 
             if (!selected || choice == "back") return;
 
-            if (choice == "networks")
+            if (choice == "domain")
+            {
+                await ManagePublicDomainAsync(http, fresh);
+            }
+            else if (choice == "networks")
             {
                 Console.WriteLine();
                 var picked = PickNetworksInteractive(fresh);
@@ -705,6 +736,260 @@ public static class InteractiveConfigurator
                 return;
             }
         }
+    }
+
+    private static async Task ManagePublicDomainAsync(HttpClient http, CliStateDto state)
+    {
+        while (true)
+        {
+            PublicDomainStatusDto? status = null;
+            try
+            {
+                status = await http.GetFromJsonAsync<PublicDomainStatusDto>("/cli/json/domain/status");
+            }
+            catch
+            {
+                status = state.PublicDomain;
+            }
+
+            var hasDomain = !string.IsNullOrWhiteSpace(status?.Domain);
+            var rows = new List<(string Key, string Value)>
+            {
+                ("Public Domain:", hasDomain
+                    ? $"{TerminalUi.Cyan}{status!.Origin}{TerminalUi.Reset}"
+                    : $"{TerminalUi.Amber}Not configured (LAN / VPN only){TerminalUi.Reset}"),
+                ("Public IPv4:", status?.PublicIp ?? "detecting..."),
+                ("Local Server:", $"{status?.LocalIp ?? "127.0.0.1"}:{status?.Port ?? state.Port}"),
+                ("SSL Status:", status is { HasTrustedCertificate: true }
+                    ? $"{TerminalUi.Green}Trusted ({status.CertificateIssuer ?? "Let's Encrypt"} · valid until {status.CertificateExpires:yyyy-MM-dd}){TerminalUi.Reset}"
+                    : $"{TerminalUi.Muted}Self-signed certificate (requires trusted domain for browser guests){TerminalUi.Reset}")
+            };
+
+            TerminalUi.DrawBox(
+                "Public Domain & Let's Encrypt SSL",
+                hasDomain ? "INTERNET · HTTPS" : "LOCAL ONLY",
+                rows);
+
+            var options = new List<SelectOption<string>>
+            {
+                new("⚡ Connect free *.dedyn.io domain (deSEC + Auto Let's Encrypt SSL)", "desec",
+                    "Automatic DDNS + real browser-trusted SSL certificate (no port 80 required!)")
+            };
+
+            if (hasDomain && status?.Provider == "desec")
+            {
+                options.Add(new("🔄 Force DDNS IP update & Let's Encrypt SSL renewal now", "refresh-desec",
+                    $"Re-sync {status.Domain} IP and verify SSL certificate"));
+            }
+
+            if (hasDomain)
+            {
+                options.Add(new("🩺 Test internet reachability & router port forwarding", "probe",
+                    $"Check if {status!.Origin} is reachable from outside your network"));
+            }
+
+            options.Add(new("🔐 Use custom domain with your own SSL certificate files (.pem)", "custom-cert",
+                "Import existing fullchain.pem + privkey.pem for any domain"));
+
+            if (hasDomain)
+            {
+                options.Add(new("🗑️  Remove public domain configuration", "remove",
+                    $"Disconnect {status!.Domain} and revert to LAN/Tailscale only"));
+            }
+
+            options.Add(new("← Back", "back"));
+
+            var (selected, action) = TerminalUi.Select("Public Domain & Guest Board Sharing Setup", options);
+            if (!selected || action == "back") return;
+
+            if (action == "desec")
+            {
+                await RunDesecSetupWizardAsync(http, status);
+            }
+            else if (action == "refresh-desec" && status?.Domain is { } existingDomain)
+            {
+                Console.WriteLine();
+                TerminalUi.Info($"Refreshing DDNS and checking Let's Encrypt SSL for {existingDomain}...");
+                var resp = await http.PostAsJsonAsync("/cli/json/domain/desec", new CliDesecDomainRequest(existingDomain, null, ForceRenew: false));
+                var res = await resp.Content.ReadFromJsonAsync<DomainSetupResultDto>();
+                PrintDomainSetupResult(res);
+                TerminalUi.Pause();
+            }
+            else if (action == "probe" && status?.Origin is { } origin)
+            {
+                Console.WriteLine();
+                TerminalUi.Info($"Testing external HTTPS reachability for {origin}/health ...");
+                var ok = await DomainManager.ProbeExternalReachabilityAsync(origin, CancellationToken.None);
+                Console.WriteLine();
+                if (ok)
+                {
+                    TerminalUi.Success($"{origin} is reachable from the internet with a trusted SSL certificate! Guest board sharing is ready.");
+                }
+                else
+                {
+                    PrintRouterPortForwardingGuide(origin, status.PublicIp, status.LocalIp, status.Port);
+                }
+                TerminalUi.Pause();
+            }
+            else if (action == "custom-cert")
+            {
+                await RunCustomCertWizardAsync(http, status);
+            }
+            else if (action == "remove" && status?.Domain is { } domToRemove)
+            {
+                if (TerminalUi.Confirm($"Remove public domain '{domToRemove}' and its SSL certificate from Penrill Server?",
+                    yesLabel: $"Yes, remove {domToRemove}"))
+                {
+                    await http.PostAsync("/cli/json/domain/remove", null);
+                    Console.WriteLine();
+                    TerminalUi.Success("Public domain configuration removed.");
+                    TerminalUi.Pause();
+                }
+            }
+        }
+    }
+
+    private static async Task RunDesecSetupWizardAsync(HttpClient http, PublicDomainStatusDto? current)
+    {
+        TerminalUi.Header(
+            "Connect Free *.dedyn.io Domain (deSEC + Let's Encrypt)",
+            "Non-profit German DNS with automatic DDNS and zero-port-80 Let's Encrypt SSL");
+        Console.WriteLine();
+        Console.WriteLine($"  {TerminalUi.Bold}How to get a free forever *.dedyn.io domain in 30 seconds:{TerminalUi.Reset}");
+        Console.WriteLine($"  1. Open {TerminalUi.Cyan}https://desec.io/signup{TerminalUi.Reset} in your browser (choose 'DynDNS', enter email & domain name).");
+        Console.WriteLine($"  2. Click the confirmation link sent to your email to set your password.");
+        Console.WriteLine($"  3. Create an API Token at {TerminalUi.Cyan}https://desec.io/tokens{TerminalUi.Reset} — OR sign in below and Penrill will create one for you.");
+        Console.WriteLine();
+
+        var (authSelected, authMode) = TerminalUi.Select<string>(
+            "How would you like to connect your deSEC account?",
+            [
+                new("🔑 Paste a deSEC API Token (recommended)", "token", "Copy token from https://desec.io/tokens"),
+                new("📧 Sign in once with deSEC Email & Password", "login", "Penrill creates an API token automatically and never saves your password"),
+                new("← Cancel", "cancel")
+            ]);
+        if (!authSelected || authMode == "cancel") return;
+
+        string? token = null;
+        string? email = null;
+        string? password = null;
+
+        if (authMode == "token")
+        {
+            token = TerminalUi.Prompt(
+                "deSEC API Token",
+                placeholder: "paste your token from https://desec.io/tokens",
+                validate: v => v.Trim().Length >= 10 ? null : "Enter a valid deSEC API token.");
+            if (token is null) return;
+        }
+        else
+        {
+            email = TerminalUi.Prompt(
+                "deSEC Account Email",
+                validate: v => AdminService.CleanEmail(v) is not null ? null : "Enter the email address you registered on desec.io.");
+            if (email is null) return;
+            password = TerminalUi.PromptPassword("deSEC Account Password", confirm: false, minLength: 1);
+            if (password is null) return;
+        }
+
+        var domainInput = TerminalUi.Prompt(
+            "Your *.dedyn.io domain name (or short name, e.g. 'myboard')",
+            defaultValue: current?.Domain,
+            placeholder: "e.g. myboard.dedyn.io",
+            validate: v => DesecClient.NormalizeDomain(v, defaultToDedyn: true) is not null
+                ? null
+                : "Enter a valid name (e.g. 'myboard' or 'myboard.dedyn.io').");
+        if (domainInput is null) return;
+
+        var normalizedDomain = DesecClient.NormalizeDomain(domainInput, defaultToDedyn: true)!;
+        Console.WriteLine();
+        TerminalUi.Info($"Provisioning {normalizedDomain}, updating DDNS IP, and requesting a Let's Encrypt certificate via DNS-01...");
+        Console.WriteLine($"  {TerminalUi.Muted}(Waiting for DNS propagation and Let's Encrypt verification — usually takes 20–45 seconds){TerminalUi.Reset}");
+        Console.WriteLine();
+
+        var resp = await http.PostAsJsonAsync(
+            "/cli/json/domain/desec",
+            new CliDesecDomainRequest(normalizedDomain, token, email, password, ForceRenew: false));
+        var res = await resp.Content.ReadFromJsonAsync<DomainSetupResultDto>();
+        PrintDomainSetupResult(res);
+        TerminalUi.Pause();
+    }
+
+    private static async Task RunCustomCertWizardAsync(HttpClient http, PublicDomainStatusDto? current)
+    {
+        TerminalUi.Header("Custom Domain with Existing SSL Certificate", "Provide your domain name and PEM certificate files");
+        Console.WriteLine();
+        var domainInput = TerminalUi.Prompt(
+            "Public domain hostname",
+            defaultValue: current?.Domain,
+            placeholder: "e.g. boards.example.com",
+            validate: v => DesecClient.NormalizeDomain(v, defaultToDedyn: false) is not null
+                ? null
+                : "Enter a full domain name (e.g. boards.example.com).");
+        if (domainInput is null) return;
+
+        var chainPath = TerminalUi.Prompt(
+            "Path to fullchain.pem (certificate + intermediate CA)",
+            placeholder: "/etc/letsencrypt/live/boards.example.com/fullchain.pem",
+            validate: v => File.Exists(v.Trim()) ? null : "File does not exist on disk.");
+        if (chainPath is null) return;
+
+        var keyPath = TerminalUi.Prompt(
+            "Path to privkey.pem (private key)",
+            placeholder: "/etc/letsencrypt/live/boards.example.com/privkey.pem",
+            validate: v => File.Exists(v.Trim()) ? null : "File does not exist on disk.");
+        if (keyPath is null) return;
+
+        Console.WriteLine();
+        var resp = await http.PostAsJsonAsync(
+            "/cli/json/domain/custom-cert",
+            new CliCustomCertRequest(domainInput, chainPath.Trim(), keyPath.Trim()));
+        var res = await resp.Content.ReadFromJsonAsync<DomainSetupResultDto>();
+        PrintDomainSetupResult(res);
+        TerminalUi.Pause();
+    }
+
+    private static void PrintDomainSetupResult(DomainSetupResultDto? res)
+    {
+        if (res is null)
+        {
+            TerminalUi.Error("Did not receive a response from the server.");
+            return;
+        }
+        foreach (var step in res.Steps)
+        {
+            TerminalUi.Success(step);
+        }
+        Console.WriteLine();
+        if (!res.Ok)
+        {
+            TerminalUi.Error(res.Message);
+            return;
+        }
+
+        TerminalUi.Success(res.Message);
+        if (!res.Reachable && res.Origin is not null)
+        {
+            Console.WriteLine();
+            PrintRouterPortForwardingGuide(res.Origin, res.PublicIp, res.LocalIp, res.Port);
+        }
+    }
+
+    private static void PrintRouterPortForwardingGuide(string origin, string? publicIp, string localIp, int port)
+    {
+        TerminalUi.Warn($"One final step on your home router: forward TCP port {port} to this server.");
+        TerminalUi.DrawBox(
+            "Router Port Forwarding Rule Needed",
+            "TCP",
+            [
+                ("Public URL:", $"{TerminalUi.Cyan}{origin}{TerminalUi.Reset}"),
+                ("Public IPv4:", publicIp ?? "(detected automatically)"),
+                ("Protocol:", "TCP"),
+                ("External Port:", $"{TerminalUi.Bold}{port}{TerminalUi.Reset}"),
+                ("Internal IP:", $"{TerminalUi.Bold}{localIp}{TerminalUi.Reset}"),
+                ("Internal Port:", $"{TerminalUi.Bold}{port}{TerminalUi.Reset}"),
+                ("SSL Cert:", $"{TerminalUi.Green}Already issued & installed! Works as soon as port {port} is forwarded.{TerminalUi.Reset}")
+            ]);
     }
 
     private static async Task ConfigureServiceEnvironmentAsync(CliStateDto state)

@@ -128,6 +128,8 @@ You can also run any command directly for quick actions or scripting:
 | `sudo penrill-server status` | Show server name, version, address, TLS fingerprint, and user/board/device counts |
 | `sudo penrill-server setup` | Print a new one-time setup link and QR code (while the server has no owner) |
 | `sudo penrill-server link` | Print the server address, Penrill connect link, and QR code |
+| `sudo penrill-server domain` | Configure a free `*.dedyn.io` domain (deSEC DDNS + auto Let's Encrypt SSL) or custom SSL certificate |
+| `sudo penrill-server networks` | List or set active networks (LAN, Tailscale, mDNS, public domain) |
 | `sudo penrill-server invite` | Create an invite link (`--admin`, `--uses N`, `--days N`) |
 | `sudo penrill-server users` | List all accounts, roles, and statuses |
 | `sudo penrill-server create-user USER` | Create an account directly (`--admin`, `--password PASS` or interactive prompt) |
