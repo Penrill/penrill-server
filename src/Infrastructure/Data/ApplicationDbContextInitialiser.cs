@@ -16,6 +16,13 @@ public static class InitialiserExtensions
         await initialiser.InitialiseAsync();
         await initialiser.SeedAsync();
     }
+
+    /// <summary>Makes sure the roles exist, for hosts whose deployment applies migrations itself.</summary>
+    public static async Task SeedDatabaseAsync(this IHost app)
+    {
+        using var scope = app.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<ApplicationDbContextInitialiser>().SeedAsync();
+    }
 }
 
 public partial class ApplicationDbContextInitialiser(
