@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Penrill.Contract.Tests</RootNamespace>
+    <AssemblyName>Penrill.Contract.Tests</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <IsTestProject>false</IsTestProject>
+    <Description>The API contract Penrill editors rely on, as NUnit fixtures. Every Penrill host derives from them with its own factory and must pass them unchanged.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="nunit" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Application\Application.csproj" />
+  </ItemGroup>
+
+</Project>

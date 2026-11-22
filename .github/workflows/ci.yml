@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          global-json-file: global.json
+
+      - run: dotnet restore Penrill.slnx
+      - run: dotnet build Penrill.slnx --no-restore -c Release
+      - run: dotnet test Penrill.slnx --no-build -c Release
+
+      - name: The model and the SQLite migrations agree
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.15
+          dotnet ef migrations has-pending-model-changes --project src/Server --startup-project src/Server --no-build -c Release

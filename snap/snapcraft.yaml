@@ -69,7 +69,7 @@ parts:
       fi
       export DOTNET_CLI_TELEMETRY_OPTOUT=1
       export DOTNET_NOLOGO=1
-      dotnet publish src/Penrill.Server -c Release -r "$rid" --self-contained true \
+      dotnet publish src/Server -c Release -r "$rid" --self-contained true \
         -p:DebugType=None -p:InvariantGlobalization=true -p:Version="$CRAFT_PROJECT_VERSION" \
         -o "$CRAFT_PART_INSTALL/lib/penrill-server"
       install -d "$CRAFT_PART_INSTALL/bin"

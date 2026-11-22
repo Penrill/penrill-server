@@ -1,0 +1,559 @@
+﻿using Microsoft.EntityFrameworkCore.Migrations;
+
+#nullable disable
+
+namespace Penrill.Server.Data.Migrations
+{
+    /// <inheritdoc />
+    public partial class Initial : Migration
+    {
+        /// <inheritdoc />
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.CreateTable(
+                name: "AspNetRoles",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "TEXT", nullable: false),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    NormalizedName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    ConcurrencyStamp = table.Column<string>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AspNetRoles", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AspNetUsers",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "TEXT", nullable: false),
+                    Disabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Created = table.Column<long>(type: "INTEGER", nullable: false),
+                    UserName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    NormalizedUserName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    Email = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    NormalizedEmail = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    EmailConfirmed = table.Column<bool>(type: "INTEGER", nullable: false),
+                    PasswordHash = table.Column<string>(type: "TEXT", nullable: true),
+                    SecurityStamp = table.Column<string>(type: "TEXT", nullable: true),
+                    ConcurrencyStamp = table.Column<string>(type: "TEXT", nullable: true),
+                    PhoneNumber = table.Column<string>(type: "TEXT", nullable: true),
+                    PhoneNumberConfirmed = table.Column<bool>(type: "INTEGER", nullable: false),
+                    TwoFactorEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    LockoutEnd = table.Column<long>(type: "INTEGER", nullable: true),
+                    LockoutEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    AccessFailedCount = table.Column<int>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AspNetUsers", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Folders",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    Owner = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Folders", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Grants",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
+                    TokenHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Kind = table.Column<int>(type: "INTEGER", nullable: false),
+                    Subject = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    CreatedBy = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    Created = table.Column<long>(type: "INTEGER", nullable: false),
+                    Expires = table.Column<long>(type: "INTEGER", nullable: true),
+                    UsesLeft = table.Column<int>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Grants", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Settings",
+                columns: table => new
+                {
+                    Key = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Value = table.Column<string>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Settings", x => x.Key);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Templates",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    Folder = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    Author = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    Data = table.Column<byte[]>(type: "BLOB", nullable: false),
+                    Updated = table.Column<long>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Templates", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AspNetRoleClaims",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    RoleId = table.Column<string>(type: "TEXT", nullable: false),
+                    ClaimType = table.Column<string>(type: "TEXT", nullable: true),
+                    ClaimValue = table.Column<string>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AspNetRoleClaims", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AspNetRoleClaims_AspNetRoles_RoleId",
+                        column: x => x.RoleId,
+                        principalTable: "AspNetRoles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AspNetUserClaims",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    UserId = table.Column<string>(type: "TEXT", nullable: false),
+                    ClaimType = table.Column<string>(type: "TEXT", nullable: true),
+                    ClaimValue = table.Column<string>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AspNetUserClaims", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_AspNetUserClaims_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AspNetUserLogins",
+                columns: table => new
+                {
+                    LoginProvider = table.Column<string>(type: "TEXT", nullable: false),
+                    ProviderKey = table.Column<string>(type: "TEXT", nullable: false),
+                    ProviderDisplayName = table.Column<string>(type: "TEXT", nullable: true),
+                    UserId = table.Column<string>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AspNetUserLogins", x => new { x.LoginProvider, x.ProviderKey });
+                    table.ForeignKey(
+                        name: "FK_AspNetUserLogins_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AspNetUserRoles",
+                columns: table => new
+                {
+                    UserId = table.Column<string>(type: "TEXT", nullable: false),
+                    RoleId = table.Column<string>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AspNetUserRoles", x => new { x.UserId, x.RoleId });
+                    table.ForeignKey(
+                        name: "FK_AspNetUserRoles_AspNetRoles_RoleId",
+                        column: x => x.RoleId,
+                        principalTable: "AspNetRoles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_AspNetUserRoles_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "AspNetUserTokens",
+                columns: table => new
+                {
+                    UserId = table.Column<string>(type: "TEXT", nullable: false),
+                    LoginProvider = table.Column<string>(type: "TEXT", nullable: false),
+                    Name = table.Column<string>(type: "TEXT", nullable: false),
+                    Value = table.Column<string>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_AspNetUserTokens", x => new { x.UserId, x.LoginProvider, x.Name });
+                    table.ForeignKey(
+                        name: "FK_AspNetUserTokens_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Boards",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Owner = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    Title = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    Background = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Seq = table.Column<long>(type: "INTEGER", nullable: false),
+                    SnapshotSeq = table.Column<long>(type: "INTEGER", nullable: false),
+                    Snapshot = table.Column<byte[]>(type: "BLOB", nullable: false),
+                    Created = table.Column<long>(type: "INTEGER", nullable: false),
+                    Updated = table.Column<long>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Boards", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Boards_AspNetUsers_Owner",
+                        column: x => x.Owner,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.SetNull);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Credentials",
+                columns: table => new
+                {
+                    Id = table.Column<string>(type: "TEXT", maxLength: 16, nullable: false),
+                    TokenHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    UserId = table.Column<string>(type: "TEXT", nullable: false),
+                    Kind = table.Column<int>(type: "INTEGER", nullable: false),
+                    Device = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Created = table.Column<long>(type: "INTEGER", nullable: false),
+                    LastUsed = table.Column<long>(type: "INTEGER", nullable: true),
+                    Expires = table.Column<long>(type: "INTEGER", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Credentials", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Credentials_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "FolderMembers",
+                columns: table => new
+                {
+                    FolderId = table.Column<string>(type: "TEXT", nullable: false),
+                    UserId = table.Column<string>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_FolderMembers", x => new { x.FolderId, x.UserId });
+                    table.ForeignKey(
+                        name: "FK_FolderMembers_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_FolderMembers_Folders_FolderId",
+                        column: x => x.FolderId,
+                        principalTable: "Folders",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "BoardAssets",
+                columns: table => new
+                {
+                    BoardId = table.Column<string>(type: "TEXT", nullable: false),
+                    Hash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    ContentType = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Size = table.Column<long>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BoardAssets", x => new { x.BoardId, x.Hash });
+                    table.ForeignKey(
+                        name: "FK_BoardAssets_Boards_BoardId",
+                        column: x => x.BoardId,
+                        principalTable: "Boards",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "BoardChanges",
+                columns: table => new
+                {
+                    BoardId = table.Column<string>(type: "TEXT", nullable: false),
+                    Seq = table.Column<long>(type: "INTEGER", nullable: false),
+                    ChangeId = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Author = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    At = table.Column<long>(type: "INTEGER", nullable: false),
+                    Body = table.Column<byte[]>(type: "BLOB", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BoardChanges", x => new { x.BoardId, x.Seq });
+                    table.ForeignKey(
+                        name: "FK_BoardChanges_Boards_BoardId",
+                        column: x => x.BoardId,
+                        principalTable: "Boards",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "BoardLinks",
+                columns: table => new
+                {
+                    BoardId = table.Column<string>(type: "TEXT", nullable: false),
+                    Token = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BoardLinks", x => x.BoardId);
+                    table.ForeignKey(
+                        name: "FK_BoardLinks_Boards_BoardId",
+                        column: x => x.BoardId,
+                        principalTable: "Boards",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "BoardPeople",
+                columns: table => new
+                {
+                    BoardId = table.Column<string>(type: "TEXT", nullable: false),
+                    UserId = table.Column<string>(type: "TEXT", nullable: false),
+                    Via = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BoardPeople", x => new { x.BoardId, x.UserId });
+                    table.ForeignKey(
+                        name: "FK_BoardPeople_AspNetUsers_UserId",
+                        column: x => x.UserId,
+                        principalTable: "AspNetUsers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_BoardPeople_Boards_BoardId",
+                        column: x => x.BoardId,
+                        principalTable: "Boards",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "FolderBoards",
+                columns: table => new
+                {
+                    FolderId = table.Column<string>(type: "TEXT", nullable: false),
+                    BoardId = table.Column<string>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_FolderBoards", x => new { x.FolderId, x.BoardId });
+                    table.ForeignKey(
+                        name: "FK_FolderBoards_Boards_BoardId",
+                        column: x => x.BoardId,
+                        principalTable: "Boards",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_FolderBoards_Folders_FolderId",
+                        column: x => x.FolderId,
+                        principalTable: "Folders",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AspNetRoleClaims_RoleId",
+                table: "AspNetRoleClaims",
+                column: "RoleId");
+
+            migrationBuilder.CreateIndex(
+                name: "RoleNameIndex",
+                table: "AspNetRoles",
+                column: "NormalizedName",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AspNetUserClaims_UserId",
+                table: "AspNetUserClaims",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AspNetUserLogins_UserId",
+                table: "AspNetUserLogins",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_AspNetUserRoles_RoleId",
+                table: "AspNetUserRoles",
+                column: "RoleId");
+
+            migrationBuilder.CreateIndex(
+                name: "EmailIndex",
+                table: "AspNetUsers",
+                column: "NormalizedEmail");
+
+            migrationBuilder.CreateIndex(
+                name: "UserNameIndex",
+                table: "AspNetUsers",
+                column: "NormalizedUserName",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BoardChanges_BoardId_ChangeId",
+                table: "BoardChanges",
+                columns: new[] { "BoardId", "ChangeId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BoardLinks_Token",
+                table: "BoardLinks",
+                column: "Token",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_BoardPeople_UserId",
+                table: "BoardPeople",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Boards_Owner",
+                table: "Boards",
+                column: "Owner");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Credentials_Expires",
+                table: "Credentials",
+                column: "Expires");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Credentials_TokenHash",
+                table: "Credentials",
+                column: "TokenHash",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Credentials_UserId",
+                table: "Credentials",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FolderBoards_BoardId",
+                table: "FolderBoards",
+                column: "BoardId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_FolderMembers_UserId",
+                table: "FolderMembers",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Grants_TokenHash",
+                table: "Grants",
+                column: "TokenHash",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Templates_Folder",
+                table: "Templates",
+                column: "Folder");
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(
+                name: "AspNetRoleClaims");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserClaims");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserLogins");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserRoles");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUserTokens");
+
+            migrationBuilder.DropTable(
+                name: "BoardAssets");
+
+            migrationBuilder.DropTable(
+                name: "BoardChanges");
+
+            migrationBuilder.DropTable(
+                name: "BoardLinks");
+
+            migrationBuilder.DropTable(
+                name: "BoardPeople");
+
+            migrationBuilder.DropTable(
+                name: "Credentials");
+
+            migrationBuilder.DropTable(
+                name: "FolderBoards");
+
+            migrationBuilder.DropTable(
+                name: "FolderMembers");
+
+            migrationBuilder.DropTable(
+                name: "Grants");
+
+            migrationBuilder.DropTable(
+                name: "Settings");
+
+            migrationBuilder.DropTable(
+                name: "Templates");
+
+            migrationBuilder.DropTable(
+                name: "AspNetRoles");
+
+            migrationBuilder.DropTable(
+                name: "Boards");
+
+            migrationBuilder.DropTable(
+                name: "Folders");
+
+            migrationBuilder.DropTable(
+                name: "AspNetUsers");
+        }
+    }
+}
