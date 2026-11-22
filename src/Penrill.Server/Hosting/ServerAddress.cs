@@ -189,6 +189,7 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
     private static string ClassifyCustomOrigin(string origin)
     {
         if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return "Custom";
+        if (uri.Host.EndsWith(".duckdns.org", StringComparison.OrdinalIgnoreCase)) return "Public Domain (DuckDNS)";
         if (uri.Host.EndsWith(".dedyn.io", StringComparison.OrdinalIgnoreCase)) return "Public Domain (deSEC)";
         if (uri.Host.EndsWith(".ts.net", StringComparison.OrdinalIgnoreCase)) return "Tailscale MagicDNS";
         if (uri.Host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)) return "Local mDNS (.local)";

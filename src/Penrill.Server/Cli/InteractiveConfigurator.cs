@@ -41,7 +41,7 @@ public static class InteractiveConfigurator
             var netSummary = string.Join(", ", state.ActiveNetworks.Select(n => n.Label));
             var domainSummary = state.PublicDomain?.Domain is { Length: > 0 } activeDom
                 ? $"{state.PublicDomain.Origin} ({(state.PublicDomain.HasTrustedCertificate ? "Trusted Let's Encrypt SSL" : "Configured")})"
-                : "Free *.dedyn.io domain + auto Let's Encrypt SSL for internet & guest sharing";
+                : "Free *.duckdns.org domain + auto Let's Encrypt SSL for internet & guest sharing";
             options.AddRange([
                 new("🔗 Connect & Web Panel", "connect", $"Addresses & QR codes ({netSummary})"),
                 new("🌐 Public Domain & SSL (Guest Sharing)", "domain", domainSummary),
@@ -273,9 +273,14 @@ public static class InteractiveConfigurator
             "Would you like to connect a public domain & Let's Encrypt SSL now (for internet & guest board sharing)?",
             [
                 new("⏭️  Skip for now (use LAN / Tailscale first)", "skip", "You can always set up a public domain later from the main menu"),
-                new("🌐 Yes — connect a free *.dedyn.io domain (deSEC + Auto Let's Encrypt SSL)", "desec", "Enables browser guest board sharing from anywhere on the internet")
+                new("🦆 Yes — connect a free *.duckdns.org domain (DuckDNS + Auto Let's Encrypt SSL)", "duckdns", "1-click GitHub/Google sign-in on duckdns.org + auto browser-trusted SSL"),
+                new("🌐 Yes — connect a domain on deSEC DNS (Auto Let's Encrypt SSL)", "desec", "For custom domains delegated to desec.io or existing *.dedyn.io domains")
             ]);
-        if (wantDomainOk && wantDomain == "desec")
+        if (wantDomainOk && wantDomain == "duckdns")
+        {
+            await RunDuckDnsSetupWizardAsync(http, null);
+        }
+        else if (wantDomainOk && wantDomain == "desec")
         {
             await RunDesecSetupWizardAsync(http, null);
         }
@@ -772,13 +777,15 @@ public static class InteractiveConfigurator
 
             var options = new List<SelectOption<string>>
             {
-                new("⚡ Connect free *.dedyn.io domain (deSEC + Auto Let's Encrypt SSL)", "desec",
-                    "Automatic DDNS + real browser-trusted SSL certificate (no port 80 required!)")
+                new("🦆 Connect free *.duckdns.org domain (DuckDNS + Auto Let's Encrypt SSL)", "duckdns",
+                    "Recommended: 1-click login on duckdns.org + auto DDNS + real Let's Encrypt SSL (no port 80 needed!)"),
+                new("🌐 Connect domain via deSEC DNS (Managed DNS + Auto Let's Encrypt SSL)", "desec",
+                    "For custom domains delegated to desec.io or existing *.dedyn.io domains")
             };
 
-            if (hasDomain && status?.Provider == "desec")
+            if (hasDomain && status?.Provider is "duckdns" or "desec")
             {
-                options.Add(new("🔄 Force DDNS IP update & Let's Encrypt SSL renewal now", "refresh-desec",
+                options.Add(new("🔄 Force DDNS IP update & Let's Encrypt SSL renewal now", "refresh-ddns",
                     $"Re-sync {status.Domain} IP and verify SSL certificate"));
             }
 
@@ -802,15 +809,21 @@ public static class InteractiveConfigurator
             var (selected, action) = TerminalUi.Select("Public Domain & Guest Board Sharing Setup", options);
             if (!selected || action == "back") return;
 
-            if (action == "desec")
+            if (action == "duckdns")
+            {
+                await RunDuckDnsSetupWizardAsync(http, status);
+            }
+            else if (action == "desec")
             {
                 await RunDesecSetupWizardAsync(http, status);
             }
-            else if (action == "refresh-desec" && status?.Domain is { } existingDomain)
+            else if (action == "refresh-ddns" && status?.Domain is { } existingDomain)
             {
                 Console.WriteLine();
                 TerminalUi.Info($"Refreshing DDNS and checking Let's Encrypt SSL for {existingDomain}...");
-                var resp = await http.PostAsJsonAsync("/cli/json/domain/desec", new CliDesecDomainRequest(existingDomain, null, ForceRenew: false));
+                var resp = status.Provider == "duckdns"
+                    ? await http.PostAsJsonAsync("/cli/json/domain/duckdns", new CliDuckDnsDomainRequest(existingDomain, null, ForceRenew: false))
+                    : await http.PostAsJsonAsync("/cli/json/domain/desec", new CliDesecDomainRequest(existingDomain, null, ForceRenew: false));
                 var res = await resp.Content.ReadFromJsonAsync<DomainSetupResultDto>();
                 PrintDomainSetupResult(res);
                 TerminalUi.Pause();
@@ -847,6 +860,50 @@ public static class InteractiveConfigurator
                 }
             }
         }
+    }
+
+    private static async Task RunDuckDnsSetupWizardAsync(HttpClient http, PublicDomainStatusDto? current)
+    {
+        TerminalUi.Header(
+            "Connect Free *.duckdns.org Domain (DuckDNS + Let's Encrypt)",
+            "Free forever domain with automatic DDNS and zero-port-80 Let's Encrypt SSL");
+        Console.WriteLine();
+        Console.WriteLine($"  {TerminalUi.Bold}How to get your free *.duckdns.org domain & token in 20 seconds:{TerminalUi.Reset}");
+        Console.WriteLine($"  1. Open {TerminalUi.Cyan}https://www.duckdns.org{TerminalUi.Reset} and sign in with {TerminalUi.Bold}GitHub, Google, or Reddit{TerminalUi.Reset} (1 click).");
+        Console.WriteLine($"  2. Type a subdomain name (e.g. {TerminalUi.Bold}yaroslav-penrill{TerminalUi.Reset}) and click {TerminalUi.Bold}add domain{TerminalUi.Reset}.");
+        Console.WriteLine($"  3. Copy the {TerminalUi.Bold}token{TerminalUi.Reset} shown at the top of the DuckDNS page.");
+        Console.WriteLine();
+
+        var defaultDom = current?.Domain is { } cd && cd.EndsWith(".duckdns.org", StringComparison.OrdinalIgnoreCase)
+            ? cd
+            : null;
+        var domainInput = TerminalUi.Prompt(
+            "Your DuckDNS subdomain or full domain (e.g. 'yaroslav-penrill')",
+            defaultValue: defaultDom,
+            placeholder: "e.g. yaroslav-penrill or yaroslav-penrill.duckdns.org",
+            validate: v => DuckDnsClient.NormalizeDomain(v) is not null
+                ? null
+                : "Enter a valid DuckDNS subdomain (letters, digits, hyphens).");
+        if (domainInput is null) return;
+
+        var token = TerminalUi.Prompt(
+            "Your DuckDNS token (from the top of https://www.duckdns.org)",
+            placeholder: "e.g. a7c4d0ad-114e-40ef-ba1d-d217904a50f2",
+            validate: v => v.Trim().Length >= 10 ? null : "Paste your token from https://www.duckdns.org.");
+        if (token is null) return;
+
+        var fullDomain = DuckDnsClient.NormalizeDomain(domainInput)!.Value.FullDomain;
+        Console.WriteLine();
+        TerminalUi.Info($"Configuring {fullDomain}, updating DDNS IP, and requesting a Let's Encrypt SSL certificate via DNS-01...");
+        Console.WriteLine($"  {TerminalUi.Muted}(Waiting for DNS propagation and Let's Encrypt verification — usually takes 20–45 seconds){TerminalUi.Reset}");
+        Console.WriteLine();
+
+        var resp = await http.PostAsJsonAsync(
+            "/cli/json/domain/duckdns",
+            new CliDuckDnsDomainRequest(fullDomain, token.Trim(), ForceRenew: false));
+        var res = await resp.Content.ReadFromJsonAsync<DomainSetupResultDto>();
+        PrintDomainSetupResult(res);
+        TerminalUi.Pause();
     }
 
     private static async Task RunDesecSetupWizardAsync(HttpClient http, PublicDomainStatusDto? current)

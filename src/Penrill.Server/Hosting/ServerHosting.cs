@@ -74,6 +74,7 @@ public static class ServerHosting
         services.AddSingleton<IPublicAddress>(address);
         services.AddSingleton(new ConnectLinks(configuration["PENRILL_CONNECT_PAGE"] is { Length: > 0 } page ? page : ConnectLinks.DefaultPage));
         services.AddSingleton<DesecClient>();
+        services.AddSingleton<DuckDnsClient>();
         services.AddSingleton<AcmeClient>();
         services.AddSingleton<DomainManager>();
         services.AddHostedService(provider => provider.GetRequiredService<DomainManager>());

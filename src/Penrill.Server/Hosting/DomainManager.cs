@@ -29,13 +29,14 @@ public sealed record DomainSetupResultDto(
     IReadOnlyList<string> Steps);
 
 /// <summary>
-/// Manages public domain provisioning (deSEC <c>*.dedyn.io</c> or custom domains),
+/// Manages public domain provisioning (DuckDNS <c>*.duckdns.org</c>, deSEC DNS, or custom domains),
 /// automatic background DDNS IP updates, and automatic Let's Encrypt DNS-01 certificate renewals.
 /// </summary>
 public sealed class DomainManager(
     AdminService admin,
     ServerAddress address,
     DesecClient desec,
+    DuckDnsClient duckdns,
     AcmeClient acme,
     ILogger<DomainManager> logger) : BackgroundService
 {
@@ -66,6 +67,92 @@ public sealed class DomainManager(
             cert?.TrustedCertificate is not null && !string.IsNullOrWhiteSpace(activeDomain) && cert.IsTrustedHost(activeDomain),
             cert?.TrustedIssuer,
             cert?.TrustedExpires);
+    }
+
+    public async Task<DomainSetupResultDto> ConfigureDuckDnsAsync(
+        string? rawDomain,
+        string? apiToken,
+        bool forceRenewCert,
+        CancellationToken cancel)
+    {
+        var steps = new List<string>();
+        var localIp = ServerAddress.PrimaryAddress().ToString();
+        var port = address.Port;
+        var parsed = DuckDnsClient.NormalizeDomain(rawDomain);
+        var domain = parsed?.FullDomain;
+
+        if (address.Certificate is not { } serverCert)
+            return Fail("HTTPS mode (PENRILL_ADDRESS_MODE=lan) is required for public domain TLS certificates.");
+
+        if (parsed is null || domain is null)
+            return Fail("Enter a valid DuckDNS subdomain (e.g. 'myboard' for myboard.duckdns.org).");
+
+        var token = (apiToken ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(token))
+            token = (await admin.DesecToken(cancel)) ?? "";
+        if (string.IsNullOrWhiteSpace(token))
+            return Fail("Provide your DuckDNS token from https://www.duckdns.org.");
+
+        var publicIp = await desec.DetectPublicIpv4Async(cancel);
+        if (string.IsNullOrWhiteSpace(publicIp))
+            return Fail("Could not detect this server's public IPv4 address.");
+        lastPublicIp = publicIp;
+        steps.Add($"Detected public IPv4 address: {publicIp}");
+
+        var (ddnsOk, ddnsErr) = await duckdns.UpdateAddressRecordAsync(token, domain, publicIp, cancel);
+        if (!ddnsOk)
+            return Fail(ddnsErr ?? $"Could not update DuckDNS IP for '{domain}'.");
+        steps.Add($"Updated DuckDNS A record: {domain} → {publicIp}");
+
+        var certIssued = false;
+        if (forceRenewCert || serverCert.NeedsTrustedRenewal(domain, RenewBeforeExpiry))
+        {
+            var contactEmail = await admin.ContactEmail(cancel);
+            var (acmeOk, fullChainPem, privateKeyPem, acmeErr) = await acme.OrderDns01CertificateAsync(
+                serverCert.TlsDirectory,
+                domain,
+                contactEmail,
+                (txtDigest, ct) => duckdns.SetAcmeTxtRecordAsync(token, domain, txtDigest, ct),
+                ct => duckdns.ClearAcmeTxtRecordAsync(token, domain, ct),
+                msg => steps.Add(msg),
+                cancel);
+
+            if (!acmeOk || fullChainPem is null || privateKeyPem is null)
+                return Fail(acmeErr ?? "Let's Encrypt certificate provisioning failed.");
+
+            serverCert.SetTrustedDomainCertificate(domain, fullChainPem, privateKeyPem);
+            certIssued = true;
+            steps.Add($"Installed trusted Let's Encrypt certificate for {domain} (valid until {serverCert.TrustedExpires:yyyy-MM-dd}).");
+        }
+        else
+        {
+            steps.Add($"Using existing valid SSL certificate for {domain} (expires {serverCert.TrustedExpires:yyyy-MM-dd}).");
+        }
+
+        await admin.SetDomainConfig(domain, "duckdns", token, cancel);
+        var origin = port == 443 ? $"https://{domain}" : $"https://{domain}:{port}";
+        await PrependActiveNetworkAsync(origin, cancel);
+
+        var reachable = await ProbeExternalReachabilityAsync(origin, cancel);
+        steps.Add(reachable
+            ? $"Verified external HTTPS connectivity to {origin}/health!"
+            : $"Domain & SSL certificate are ready, but {origin} is not reachable from the internet yet (forward TCP port {port} → {localIp}:{port} on your router).");
+
+        return new DomainSetupResultDto(
+            true,
+            domain,
+            origin,
+            publicIp,
+            localIp,
+            port,
+            false,
+            certIssued,
+            reachable,
+            $"Public domain {origin} configured with a trusted Let's Encrypt SSL certificate.",
+            steps);
+
+        DomainSetupResultDto Fail(string error) =>
+            new(false, domain, null, lastPublicIp, localIp, port, false, false, false, error, steps);
     }
 
     public async Task<DomainSetupResultDto> ConfigureDesecAsync(
@@ -329,21 +416,23 @@ public sealed class DomainManager(
         var domain = await admin.DomainName(cancel);
         var provider = await admin.DomainProvider(cancel);
         var token = await admin.DesecToken(cancel);
-        if (string.IsNullOrWhiteSpace(domain) || provider != "desec" || string.IsNullOrWhiteSpace(token))
+        if (string.IsNullOrWhiteSpace(domain) || provider is not ("desec" or "duckdns") || string.IsNullOrWhiteSpace(token))
             return;
 
         var currentIp = await desec.DetectPublicIpv4Async(cancel);
         if (!string.IsNullOrWhiteSpace(currentIp) && currentIp != lastPublicIp)
         {
-            var (ok, err) = await desec.UpdateAddressRecordAsync(token, domain, currentIp, cancel);
+            var (ok, err) = provider == "duckdns"
+                ? await duckdns.UpdateAddressRecordAsync(token, domain, currentIp, cancel)
+                : await desec.UpdateAddressRecordAsync(token, domain, currentIp, cancel);
             if (ok)
             {
                 lastPublicIp = currentIp;
-                logger.LogInformation("Updated deSEC DDNS A record for {Domain} to {PublicIp}.", domain, currentIp);
+                logger.LogInformation("Updated {Provider} DDNS A record for {Domain} to {PublicIp}.", provider, domain, currentIp);
             }
             else
             {
-                logger.LogWarning("Could not update deSEC DDNS for {Domain}: {Error}", domain, err);
+                logger.LogWarning("Could not update {Provider} DDNS for {Domain}: {Error}", provider, domain, err);
             }
         }
 
@@ -352,14 +441,18 @@ public sealed class DomainManager(
             DateTimeOffset.UtcNow - lastAcmeAttempt > TimeSpan.FromHours(6))
         {
             lastAcmeAttempt = DateTimeOffset.UtcNow;
-            logger.LogInformation("Renewing Let's Encrypt TLS certificate for {Domain} via deSEC DNS-01...", domain);
+            logger.LogInformation("Renewing Let's Encrypt TLS certificate for {Domain} via {Provider} DNS-01...", domain, provider);
             var email = await admin.ContactEmail(cancel);
             var (acmeOk, chainPem, keyPem, acmeErr) = await acme.OrderDns01CertificateAsync(
                 serverCert.TlsDirectory,
                 domain,
                 email,
-                (txt, ct) => desec.SetAcmeTxtRecordAsync(token, domain, txt, ct),
-                ct => desec.ClearAcmeTxtRecordAsync(token, domain, ct),
+                (txt, ct) => provider == "duckdns"
+                    ? duckdns.SetAcmeTxtRecordAsync(token, domain, txt, ct)
+                    : desec.SetAcmeTxtRecordAsync(token, domain, txt, ct),
+                ct => provider == "duckdns"
+                    ? duckdns.ClearAcmeTxtRecordAsync(token, domain, ct)
+                    : desec.ClearAcmeTxtRecordAsync(token, domain, ct),
                 null,
                 cancel);
             if (acmeOk && chainPem is not null && keyPem is not null)

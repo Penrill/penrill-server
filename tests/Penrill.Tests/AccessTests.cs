@@ -178,6 +178,10 @@ public sealed class AccessTests : IDisposable
     [Fact]
     public void PublicDomainSniCertificateAndPinlessConnectLinks()
     {
+        Assert.Equal(("myboard", "myboard.duckdns.org"), DuckDnsClient.NormalizeDomain("myboard"));
+        Assert.Equal(("my-board", "my-board.duckdns.org"), DuckDnsClient.NormalizeDomain("https://My-Board.duckdns.org:5081/"));
+        Assert.Null(DuckDnsClient.NormalizeDomain("other.example.com"));
+
         Assert.Equal("myboard.dedyn.io", DesecClient.NormalizeDomain("myboard"));
         Assert.Equal("myboard.dedyn.io", DesecClient.NormalizeDomain("https://MyBoard.dedyn.io:5081/"));
         Assert.Null(DesecClient.NormalizeDomain("192.168.1.253"));

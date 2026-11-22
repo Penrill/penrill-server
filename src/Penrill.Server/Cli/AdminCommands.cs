@@ -29,7 +29,7 @@ public sealed record CliContext(string[] Args, IServiceProvider Services, Cancel
         {
             if (Args[i].StartsWith("--", StringComparison.Ordinal))
             {
-                if (Args[i] is "--uses" or "--days" or "--revoke" or "--password" or "--owner" or "--delete" or "--role" or "--set" or "--desec" or "--token" or "--email" or "--cert" or "--key") i++;
+                if (Args[i] is "--uses" or "--days" or "--revoke" or "--password" or "--owner" or "--delete" or "--role" or "--set" or "--duckdns" or "--desec" or "--token" or "--email" or "--cert" or "--key") i++;
                 continue;
             }
             if (pos == index) return Args[i];
@@ -58,6 +58,7 @@ public sealed record CliStateDto(
     PublicDomainStatusDto? PublicDomain = null);
 
 public sealed record CliClaimRequest(string Name, string Password, string ServerName, string Email, string? Networks = null);
+public sealed record CliDuckDnsDomainRequest(string Domain, string? Token, bool ForceRenew = false);
 public sealed record CliDesecDomainRequest(string Domain, string? Token, string? Email = null, string? Password = null, bool ForceRenew = false);
 public sealed record CliCustomCertRequest(string Domain, string FullChainPath, string PrivateKeyPath);
 
@@ -71,7 +72,7 @@ public static class AdminCommands
         new("status", "status", "Address, certificate, users and boards", Status),
         new("setup", "setup", "Print a new setup link while the server has no owner", Setup),
         new("link", "link", "Print server addresses, web panel links and QR code", Link),
-        new("domain", "domain [--desec DOMAIN --token TOKEN | --cert DOMAIN CHAIN KEY | --remove]", "Configure public domain, free *.dedyn.io DDNS & Let's Encrypt SSL", Domain),
+        new("domain", "domain [--duckdns SUBDOMAIN --token TOKEN | --desec DOMAIN --token TOKEN | --cert DOMAIN CHAIN KEY | --remove]", "Configure public domain, free *.duckdns.org DDNS & Let's Encrypt SSL", Domain),
         new("networks", "networks [--set URL1,URL2]", "List discovered and active networks (LAN, Tailscale, custom)", Networks),
         new("invite", "invite [--admin] [--uses N] [--days N]", "Print an invite link for a new account", Invite),
         new("users", "users", "List accounts", Users),
@@ -143,6 +144,9 @@ public static class AdminCommands
 
         cli.MapGet("/json/domain/status", async (DomainManager domainManager, CancellationToken cancel) =>
             Results.Ok(await domainManager.GetStatusAsync(cancel, detectPublicIp: true)));
+
+        cli.MapPost("/json/domain/duckdns", async (CliDuckDnsDomainRequest req, DomainManager domainManager, CancellationToken cancel) =>
+            Results.Ok(await domainManager.ConfigureDuckDnsAsync(req.Domain, req.Token, req.ForceRenew, cancel)));
 
         cli.MapPost("/json/domain/desec", async (CliDesecDomainRequest req, DomainManager domainManager, CancellationToken cancel) =>
             Results.Ok(await domainManager.ConfigureDesecAsync(req.Domain, req.Token, req.Email, req.Password, req.ForceRenew, cancel)));
@@ -278,6 +282,16 @@ public static class AdminCommands
         {
             await dm.RemoveDomainAsync(c.Cancel);
             return await Text("Public domain configuration removed.");
+        }
+        if (c.Option("--duckdns") is { } duckDomain)
+        {
+            var token = c.Option("--token");
+            var res = await dm.ConfigureDuckDnsAsync(duckDomain, token, c.Flag("--renew"), c.Cancel);
+            var sb = new StringBuilder();
+            foreach (var step in res.Steps)
+                sb.AppendLine($"  • {step}");
+            sb.AppendLine(res.Message);
+            return res.Ok ? await Text(sb.ToString()) : await Fail(sb.ToString());
         }
         if (c.Option("--desec") is { } desecDomain)
         {
