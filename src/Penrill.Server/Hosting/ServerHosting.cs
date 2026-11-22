@@ -47,7 +47,7 @@ public static class ServerHosting
             address = new ServerAddress(AddressMode.Lan, "", port, certificate);
             // Visitors use whatever name or address reaches this machine; links are built from the request or the LAN address.
             configuration["AllowedHosts"] = "*";
-            builder.WebHost.ConfigureKestrel(kestrel => kestrel.ListenAnyIP(port, listen => listen.UseHttps(certificate.Certificate)));
+            builder.WebHost.ConfigureKestrel(kestrel => kestrel.ListenAnyIP(port, listen => listen.UseHttps(https => https.ServerCertificateSelector = (_, _) => certificate.Certificate)));
         }
         else
         {

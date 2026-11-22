@@ -35,6 +35,8 @@ public static class SettingKeys
     public const string ServerName = "server.name";
     /// <summary>Who runs the server. Kept for notices about it (updates, security), not used to sign in.</summary>
     public const string ContactEmail = "server.email";
+    /// <summary>Comma-separated origins (LAN, Tailscale, mDNS, custom domain) enabled for connect and invite links.</summary>
+    public const string Networks = "server.networks";
 }
 
 /// <summary>
@@ -127,6 +129,10 @@ public sealed class AdminService(AccountService accounts, IAccountStore store, G
     public const int MaxEmail = 254;
 
     public Task<string?> ContactEmail(CancellationToken cancel) => settings.Get(SettingKeys.ContactEmail, cancel);
+
+    public Task<string?> SelectedNetworks(CancellationToken cancel) => settings.Get(SettingKeys.Networks, cancel);
+
+    public Task SetSelectedNetworks(string originsCsv, CancellationToken cancel) => settings.Set(SettingKeys.Networks, originsCsv, cancel);
 
     public async Task<bool> SetContactEmail(string? email, CancellationToken cancel)
     {

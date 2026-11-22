@@ -9,29 +9,28 @@ namespace Penrill.Server.Hosting;
 /// <summary>
 /// The server's own TLS certificate for "this network only": self-signed, created on first start and
 /// kept in the data directory. Editors trust it by its pin, the SHA-256 of the public key, so a
-/// renewed certificate with the same key keeps working.
+/// renewed certificate with the same key keeps working even when new network hostnames or IPs are added.
 /// </summary>
 public sealed class ServerCertificate
 {
     private static readonly TimeSpan Validity = TimeSpan.FromDays(3650);
+    private readonly string keyPath;
+    private readonly string hostsPath;
+    private readonly Lock sync = new();
+    private volatile X509Certificate2 certificate;
 
     public ServerCertificate(string dataDirectory)
     {
         var directory = Path.Combine(dataDirectory, "tls");
-        var keyPath = Path.Combine(directory, "server.key");
+        keyPath = Path.Combine(directory, "server.key");
+        hostsPath = Path.Combine(directory, "hosts.txt");
         Directory.CreateDirectory(directory);
-        using var key = ECDsa.Create();
-        if (File.Exists(keyPath)) key.ImportFromPem(File.ReadAllText(keyPath));
-        else
-        {
-            key.GenerateKey(ECCurve.NamedCurves.nistP256);
-            PrivateFile.Write(keyPath, key.ExportPkcs8PrivateKeyPem());
-        }
-        Certificate = Create(key);
+        using var key = LoadOrCreateKey();
+        certificate = Create(key, ReadSavedHosts());
         Pin = PinOf(key.ExportSubjectPublicKeyInfo());
     }
 
-    public X509Certificate2 Certificate { get; }
+    public X509Certificate2 Certificate => certificate;
 
     /// <summary><c>sha256/&lt;base64&gt;</c>, the form used in connect links and by the editor.</summary>
     public string Pin { get; }
@@ -48,15 +47,71 @@ public sealed class ServerCertificate
         return $"{hex[..4]}-{hex[4..8]}-{hex[8..12]}";
     }
 
+    /// <summary>Updates the certificate's Subject Alternative Names with custom origins/hosts while keeping the same key and pin.</summary>
+    public void UpdateExtraOrigins(IEnumerable<string> origins)
+    {
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in origins)
+        {
+            if (Uri.TryCreate(item.Trim(), UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
+                hosts.Add(uri.Host.Trim('[', ']'));
+            else if (!string.IsNullOrWhiteSpace(item))
+                hosts.Add(item.Trim().Trim('[', ']'));
+        }
+        lock (sync)
+        {
+            File.WriteAllLines(hostsPath, hosts);
+            using var key = LoadOrCreateKey();
+            certificate = Create(key, hosts);
+        }
+    }
+
+    private ECDsa LoadOrCreateKey()
+    {
+        var key = ECDsa.Create();
+        if (File.Exists(keyPath))
+        {
+            key.ImportFromPem(File.ReadAllText(keyPath));
+        }
+        else
+        {
+            key.GenerateKey(ECCurve.NamedCurves.nistP256);
+            PrivateFile.Write(keyPath, key.ExportPkcs8PrivateKeyPem());
+        }
+        return key;
+    }
+
+    private IReadOnlyList<string> ReadSavedHosts() =>
+        File.Exists(hostsPath)
+            ? File.ReadAllLines(hostsPath).Where(l => !string.IsNullOrWhiteSpace(l)).Select(l => l.Trim()).ToList()
+            : [];
+
     /// <summary>A fresh certificate on every start: names and addresses follow the machine, the key and so the pin stay.</summary>
-    private static X509Certificate2 Create(ECDsa key)
+    private static X509Certificate2 Create(ECDsa key, IEnumerable<string> extraHosts)
     {
         var host = Dns.GetHostName();
         var request = new CertificateRequest($"CN={host}, O=Penrill Server", key, HashAlgorithmName.SHA256);
         var names = new SubjectAlternativeNameBuilder();
-        foreach (var name in new[] { host, host.EndsWith(".local", StringComparison.OrdinalIgnoreCase) ? host : host + ".local", "localhost" }.Distinct(StringComparer.OrdinalIgnoreCase)) names.AddDnsName(name);
-        foreach (var address in LocalAddresses()) names.AddIpAddress(address);
-        names.AddIpAddress(IPAddress.Loopback);
+        var dnsNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            host,
+            host.EndsWith(".local", StringComparison.OrdinalIgnoreCase) ? host : host + ".local",
+            "localhost"
+        };
+        var ipAddresses = new HashSet<IPAddress>(LocalAddresses()) { IPAddress.Loopback };
+
+        if (ServerAddress.TryGetTailscaleDnsName() is { } tsDns)
+            dnsNames.Add(tsDns);
+
+        foreach (var extra in extraHosts)
+        {
+            if (IPAddress.TryParse(extra, out var extraIp)) ipAddresses.Add(extraIp);
+            else if (!string.IsNullOrWhiteSpace(extra)) dnsNames.Add(extra);
+        }
+
+        foreach (var name in dnsNames) names.AddDnsName(name);
+        foreach (var address in ipAddresses) names.AddIpAddress(address);
+
         request.CertificateExtensions.Add(names.Build());
         request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
         request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid("1.3.6.1.5.5.7.3.1")], false));

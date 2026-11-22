@@ -29,7 +29,7 @@ public sealed record CliContext(string[] Args, IServiceProvider Services, Cancel
         {
             if (Args[i].StartsWith("--", StringComparison.Ordinal))
             {
-                if (Args[i] is "--uses" or "--days" or "--revoke" or "--password" or "--owner" or "--delete" or "--role") i++;
+                if (Args[i] is "--uses" or "--days" or "--revoke" or "--password" or "--owner" or "--delete" or "--role" or "--set") i++;
                 continue;
             }
             if (pos == index) return Args[i];
@@ -46,14 +46,17 @@ public sealed record CliUserDto(string Name, string Role, bool Disabled, DateTim
 public sealed record CliDeviceDto(string Id, string User, string Name, DateTimeOffset Created, DateTimeOffset? LastUsed);
 public sealed record CliBoardDto(string Id, string Title, string Owner, long Seq, DateTimeOffset Updated);
 public sealed record CliInviteDto(string Id, string Role, int UsesLeft, DateTimeOffset? Expires, string CreatedBy);
+public sealed record CliNetworkDto(string Label, string Kind, string Origin, bool DefaultEnabled);
 
 public sealed record CliStateDto(
     string ServerName, string? Email, string Version, string Origin, string ConnectLink,
-    string? Pin, string? ShortPin, bool Lan, bool Unclaimed,
+    string? Pin, string? ShortPin, bool Lan, int Port, bool Unclaimed,
+    IReadOnlyList<CliNetworkDto> DiscoveredNetworks,
+    IReadOnlyList<CliNetworkDto> ActiveNetworks,
     IReadOnlyList<CliUserDto> Users, IReadOnlyList<CliDeviceDto> Devices,
     IReadOnlyList<CliBoardDto> Boards, IReadOnlyList<CliInviteDto> Invites);
 
-public sealed record CliClaimRequest(string Name, string Password, string ServerName, string Email);
+public sealed record CliClaimRequest(string Name, string Password, string ServerName, string Email, string? Networks = null);
 
 public static class AdminCommands
 {
@@ -64,7 +67,8 @@ public static class AdminCommands
         new("configure", "configure", "Interactive setup wizard and server management menu", Status),
         new("status", "status", "Address, certificate, users and boards", Status),
         new("setup", "setup", "Print a new setup link while the server has no owner", Setup),
-        new("link", "link", "Print a link that connects a Penrill editor to this server", Link),
+        new("link", "link", "Print server addresses, web panel links and QR code", Link),
+        new("networks", "networks [--set URL1,URL2]", "List discovered and active networks (LAN, Tailscale, custom)", Networks),
         new("invite", "invite [--admin] [--uses N] [--days N]", "Print an invite link for a new account", Invite),
         new("users", "users", "List accounts", Users),
         new("create-user", "create-user USER [--admin] [--password PASS]", "Create a new account directly", CreateUser),
@@ -92,7 +96,14 @@ public static class AdminCommands
 
         cli.MapGet("/json/state", async (AdminService admin, GrantService grants, ServerAddress address, ConnectLinks links, CancellationToken cancel) =>
         {
-            var origin = address.DefaultOrigin;
+            var savedNets = await admin.SelectedNetworks(cancel);
+            var discovered = address.DiscoverEndpoints()
+                .Select(n => new CliNetworkDto(n.Label, n.Kind, n.Origin, n.DefaultEnabled))
+                .ToList();
+            var active = address.ActiveEndpoints(savedNets)
+                .Select(n => new CliNetworkDto(n.Label, n.Kind, n.Origin, n.DefaultEnabled))
+                .ToList();
+            var primaryOrigin = active.Count > 0 ? active[0].Origin : address.DefaultOrigin;
             var users = (await admin.Users(cancel))
                 .Select(u => new CliUserDto(u.Name, u.Role.ToString().ToLowerInvariant(), u.Disabled, u.Created))
                 .ToList();
@@ -108,20 +119,23 @@ public static class AdminCommands
             return Results.Ok(new CliStateDto(
                 await admin.ServerName(cancel),
                 await admin.ContactEmail(cancel),
-                typeof(AdminCommands).Assembly.GetName().Version?.ToString(3) ?? "0.3.0",
-                origin,
-                links.For(origin, address.Pin),
+                typeof(AdminCommands).Assembly.GetName().Version?.ToString(3) ?? "0.3.3",
+                primaryOrigin,
+                links.For(primaryOrigin, address.Pin),
                 address.Pin,
                 address.ShortPin,
                 address.Mode == AddressMode.Lan,
+                address.Port,
                 await grants.Unclaimed(cancel),
+                discovered,
+                active,
                 users,
                 devices,
                 boards,
                 invites));
         });
 
-        cli.MapPost("/json/claim", async (CliClaimRequest req, GrantService grants, AdminService admin, CancellationToken cancel) =>
+        cli.MapPost("/json/claim", async (CliClaimRequest req, GrantService grants, AdminService admin, ServerAddress address, CancellationToken cancel) =>
         {
             if (AdminService.CleanEmail(req.Email) is null) return await Fail("Invalid email address.");
             if (req.ServerName.Trim() is not { Length: > 0 and <= AdminService.MaxServerName }) return await Fail("Server name must be 1 to 64 characters.");
@@ -130,11 +144,40 @@ public static class AdminCommands
             if (result.Status != RedeemStatus.Ok) return await Fail($"Could not create owner account ({result.Status}).");
             await admin.Rename(req.ServerName, cancel);
             await admin.SetContactEmail(req.Email, cancel);
+            if (!string.IsNullOrWhiteSpace(req.Networks))
+            {
+                await SaveNetworksAsync(req.Networks.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), admin, address, cancel);
+            }
             return await Text($"Server claimed by {result.User}.");
+        });
+
+        cli.MapPost("/json/networks", async (string[] origins, AdminService admin, ServerAddress address, CancellationToken cancel) =>
+        {
+            var saved = await SaveNetworksAsync(origins, admin, address, cancel);
+            return saved.Count > 0
+                ? await Text($"Active networks updated ({string.Join(", ", saved)}).")
+                : await Fail("Specify at least one valid network address.");
         });
 
         cli.MapPost("/delete-invite", async (string[] args, AdminService admin, CancellationToken cancel) =>
             args.Length > 0 && await admin.DeleteInvite(args[0], cancel) ? await Text("Invite deleted.") : await Fail("No such invite."));
+    }
+
+    private static async Task<List<string>> SaveNetworksAsync(IEnumerable<string> rawOrigins, AdminService admin, ServerAddress address, CancellationToken cancel)
+    {
+        var scheme = address.Mode == AddressMode.Lan ? "https" : "http";
+        var normalized = rawOrigins
+            .Select(o => ServerAddress.NormalizeOrigin(o, address.Port, scheme))
+            .Where(o => o is not null)
+            .Select(o => o!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (normalized.Count > 0)
+        {
+            await admin.SetSelectedNetworks(string.Join(',', normalized), cancel);
+            address.RefreshCertificate(normalized);
+        }
+        return normalized;
     }
 
     private static Task<IResult> Text(string text) => Task.FromResult(Results.Text(text.EndsWith('\n') ? text : text + "\n"));
@@ -143,19 +186,27 @@ public static class AdminCommands
 
     private static string WithQr(string title, string url) => $"{title}\n\n  {url}\n\n{Qr.Terminal(url)}";
 
+    private static async Task<IReadOnlyList<NetworkEndpoint>> ActiveNetworksOf(CliContext c)
+    {
+        var saved = await c.Get<AdminService>().SelectedNetworks(c.Cancel);
+        return c.Get<ServerAddress>().ActiveEndpoints(saved);
+    }
+
     private static async Task<IResult> Status(CliContext c)
     {
         var admin = c.Get<AdminService>();
         var address = c.Get<ServerAddress>();
+        var nets = await ActiveNetworksOf(c);
         var counts = await admin.Counts(c.Cancel);
         var claimed = !await c.Get<GrantService>().Unclaimed(c.Cancel);
         var text = new StringBuilder()
             .AppendLine($"Name:         {await admin.ServerName(c.Cancel)}")
-            .AppendLine($"Version:      {typeof(AdminCommands).Assembly.GetName().Version?.ToString(3)}")
-            .AppendLine($"Address:      {address.DefaultOrigin}")
-            .AppendLine($"Mode:         {(address.Mode == AddressMode.Lan ? "this network only" : "local")}");
+            .AppendLine($"Version:      {typeof(AdminCommands).Assembly.GetName().Version?.ToString(3)}");
+        foreach (var net in nets)
+            text.AppendLine($"{net.Label + ":",-14}{net.Origin}");
+        text.AppendLine($"Mode:         {(address.Mode == AddressMode.Lan ? "HTTPS (all interfaces)" : "HTTP (local)")}");
         if (address.ShortPin is { } pin) text.AppendLine($"Certificate:  {pin}  ({address.Pin})");
-        text.AppendLine($"Owner:        {(claimed ? "set" : "none yet, run: penrill-server setup")}")
+        text.AppendLine($"Owner:        {(claimed ? "set" : "none yet, run: sudo penrill-server")}")
             .AppendLine($"Accounts:     {counts.Users}")
             .AppendLine($"Boards:       {counts.Boards}")
             .AppendLine($"Devices:      {counts.Devices}");
@@ -165,13 +216,55 @@ public static class AdminCommands
     private static async Task<IResult> Setup(CliContext c) =>
         await c.Get<SetupAnnouncer>().Message(c.Cancel) is { } message
             ? await Text(message)
-            : await Text("This server already has an owner. To add people, run: penrill-server invite");
+            : await Text("This server already has an owner. To add people, run: sudo penrill-server invite");
 
-    private static Task<IResult> Link(CliContext c)
+    private static async Task<IResult> Link(CliContext c)
     {
         var address = c.Get<ServerAddress>();
-        return Text($"In Penrill, open Sync › Your server and enter {address.DefaultOrigin}\n\n" +
-            WithQr("Or open this link, or scan it on a tablet:", c.Get<ConnectLinks>().For(address.DefaultOrigin, address.Pin)));
+        var nets = await ActiveNetworksOf(c);
+        var primary = nets[0];
+        var sb = new StringBuilder();
+        sb.AppendLine("Server Web Panel & Penrill Server Address (open in a browser or enter in Penrill › Sync › Your server):");
+        sb.AppendLine();
+        foreach (var net in nets)
+            sb.AppendLine($"  • {net.Label,-24} {net.Origin}");
+        if (address.ShortPin is { } pin)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"TLS Certificate Fingerprint: {pin}  ({address.Pin})");
+        }
+        sb.AppendLine();
+        sb.AppendLine($"QR Code for {primary.Label} ({primary.Origin}):");
+        sb.AppendLine();
+        sb.Append(Qr.Terminal(primary.Origin));
+        return await Text(sb.ToString());
+    }
+
+    private static async Task<IResult> Networks(CliContext c)
+    {
+        var admin = c.Get<AdminService>();
+        var address = c.Get<ServerAddress>();
+        if (c.Option("--set") is { } setCsv)
+        {
+            var saved = await SaveNetworksAsync(setCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), admin, address, c.Cancel);
+            return saved.Count > 0
+                ? await Text($"Active networks updated: {string.Join(", ", saved)}")
+                : await Fail("No valid network addresses provided.");
+        }
+        var active = await ActiveNetworksOf(c);
+        var activeSet = active.Select(a => a.Origin).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var sb = new StringBuilder();
+        sb.AppendLine("Active networks:");
+        foreach (var net in active)
+            sb.AppendLine($"  [✓] {net.Label,-26} {net.Origin}");
+        var others = address.DiscoverEndpoints().Where(d => !activeSet.Contains(d.Origin)).ToList();
+        if (others.Count > 0)
+        {
+            sb.AppendLine("\nOther available networks on this machine:");
+            foreach (var net in others)
+                sb.AppendLine($"  [ ] {net.Label,-26} {net.Origin}");
+        }
+        return await Text(sb.ToString());
     }
 
     private static async Task<IResult> Invite(CliContext c)
@@ -179,15 +272,45 @@ public static class AdminCommands
         var uses = int.TryParse(c.Option("--uses"), CultureInfo.InvariantCulture, out var n) ? n : 1;
         var days = double.TryParse(c.Option("--days"), CultureInfo.InvariantCulture, out var d) ? d : 7;
         var invite = await c.Get<AdminService>().Invite(By, c.Flag("--admin") ? Role.Admin : Role.Member, TimeSpan.FromDays(days), uses, c.Cancel);
-        var url = $"{c.Get<ServerAddress>().DefaultOrigin}/invite/{invite.Token}";
-        return await Text(WithQr($"Invite link, {(uses == 1 ? "single use" : $"{uses} uses")}, valid for {days} days:", url));
+        var nets = await ActiveNetworksOf(c);
+        var primaryUrl = $"{nets[0].Origin}/invite/{invite.Token}";
+        var sb = new StringBuilder();
+        sb.AppendLine($"Invite link, {(uses == 1 ? "single use" : $"{uses} uses")}, valid for {days} days:");
+        sb.AppendLine();
+        if (nets.Count == 1)
+        {
+            sb.AppendLine($"  {primaryUrl}");
+        }
+        else
+        {
+            foreach (var net in nets)
+                sb.AppendLine($"  • {net.Label,-24} {net.Origin}/invite/{invite.Token}");
+        }
+        sb.AppendLine();
+        sb.Append(Qr.Terminal(primaryUrl));
+        return await Text(sb.ToString());
     }
 
     private static async Task<IResult> Reset(CliContext c)
     {
         if (await c.Get<AdminService>().ResetLink(By, c.Positional(0), c.Cancel) is not { } reset) return await Fail("No such account.");
-        return await Text(WithQr($"Password reset link for {reset.Grant.Subject}, valid for one hour:",
-            $"{c.Get<ServerAddress>().DefaultOrigin}/reset/{reset.Token}"));
+        var nets = await ActiveNetworksOf(c);
+        var primaryUrl = $"{nets[0].Origin}/reset/{reset.Token}";
+        var sb = new StringBuilder();
+        sb.AppendLine($"Password reset link for {reset.Grant.Subject}, valid for one hour:");
+        sb.AppendLine();
+        if (nets.Count == 1)
+        {
+            sb.AppendLine($"  {primaryUrl}");
+        }
+        else
+        {
+            foreach (var net in nets)
+                sb.AppendLine($"  • {net.Label,-24} {net.Origin}/reset/{reset.Token}");
+        }
+        sb.AppendLine();
+        sb.Append(Qr.Terminal(primaryUrl));
+        return await Text(sb.ToString());
     }
 
     private static async Task<IResult> Users(CliContext c)

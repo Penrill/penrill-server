@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using Penrill.Core.Accounts;
 using Penrill.Core.Admin;
+using Penrill.Server.Hosting;
 
 namespace Penrill.Server.Cli;
 
@@ -17,9 +18,7 @@ public static class InteractiveConfigurator
         TerminalUi.EnsureCursorRestoredOnExit();
         var state = await FetchStateAsync(http);
         if (state is null)
-        {
             return await RunOfflineRecoveryMenuAsync(http);
-        }
 
         if (state.Unclaimed)
         {
@@ -39,15 +38,16 @@ public static class InteractiveConfigurator
             if (state.Unclaimed)
                 options.Add(new("⚡ Finish First-Time Setup", "setup", "Create the owner account and claim this server"));
 
+            var netSummary = string.Join(", ", state.ActiveNetworks.Select(n => n.Label));
             options.AddRange([
-                new("🔗 Connect Penrill", "connect", "Show server address, connect link & QR code"),
+                new("🔗 Connect & Web Panel", "connect", $"Addresses & QR codes ({netSummary})"),
                 new("👥 Users & Passwords", "users", $"{state.Users.Count} account(s) — create, reset password, role, delete"),
                 new("✉️  Invites", "invites", $"{state.Invites.Count} active — create or revoke invite links"),
                 new("📱 Linked Devices", "devices", $"{state.Devices.Count} device(s) — view or revoke access"),
                 new("📋 Boards", "boards", $"{state.Boards.Count} board(s) — view, assign owner, or delete"),
-                new("⚙️  Server Settings", "settings", "Rename server, contact email, network port & CORS"),
+                new("🌍 Networks & Settings", "settings", "Choose networks (LAN, Tailscale, custom), name, email & port"),
                 new("💾 Backup Server", "backup", "Export all boards, images & accounts to a .zip archive"),
-                new("🔄 Service & Uninstall", "service", "Restart service, view logs, or uninstall Penrill Server"),
+                new("🔄 Service & Uninstall", "service", "Restart, logs, factory reset, or uninstall Penrill Server"),
                 new("🚪 Exit", "exit", "Close configurator")
             ]);
 
@@ -64,9 +64,7 @@ public static class InteractiveConfigurator
                     await RunFirstSetupWizardAsync(http, state);
                     break;
                 case "connect":
-                    Console.WriteLine();
-                    await RunCliVerbAsync(http, "link", []);
-                    TerminalUi.Pause();
+                    await ShowConnectScreenAsync(state);
                     break;
                 case "users":
                     await ManageUsersAsync(http);
@@ -101,11 +99,22 @@ public static class InteractiveConfigurator
             : $"{TerminalUi.Green}{owner ?? "set"}{TerminalUi.Reset}";
         var rows = new List<(string Key, string Value)>
         {
-            ("Name:", state.ServerName),
-            ("Address:", $"{TerminalUi.Cyan}{state.Origin}{TerminalUi.Reset}")
+            ("Name:", state.ServerName)
         };
+        if (state.ActiveNetworks.Count == 0)
+        {
+            rows.Add(("Address:", $"{TerminalUi.Cyan}{state.Origin}{TerminalUi.Reset}"));
+        }
+        else
+        {
+            foreach (var net in state.ActiveNetworks)
+            {
+                var shortLabel = net.Label.Length > 12 ? net.Label[..12] : net.Label;
+                rows.Add((shortLabel + ":", $"{TerminalUi.Cyan}{net.Origin}{TerminalUi.Reset}"));
+            }
+        }
         if (state.ShortPin is { } pin)
-            rows.Add(("Certificate:", $"{pin}"));
+            rows.Add(("Certificate:", pin));
         if (!string.IsNullOrEmpty(state.Email))
             rows.Add(("Email:", state.Email));
         rows.Add(("Owner:", ownerDisplay));
@@ -117,6 +126,58 @@ public static class InteractiveConfigurator
             rows);
     }
 
+    private static Task ShowConnectScreenAsync(CliStateDto state)
+    {
+        var activeIndex = 0;
+        while (true)
+        {
+            var nets = state.ActiveNetworks.Count > 0
+                ? state.ActiveNetworks
+                : [new CliNetworkDto("Server", "lan", state.Origin, true)];
+            var current = nets[Math.Clamp(activeIndex, 0, nets.Count - 1)];
+
+            TerminalUi.Header("Connect Penrill & Web Panel", $"{nets.Count} active network(s)");
+            Console.WriteLine();
+            Console.WriteLine($"  {TerminalUi.Bold}Web Admin Panel & Server Addresses:{TerminalUi.Reset}");
+            Console.WriteLine($"  {TerminalUi.Muted}(Open directly in your browser, or enter in Penrill › Sync › Your server){TerminalUi.Reset}");
+            Console.WriteLine();
+            for (var i = 0; i < nets.Count; i++)
+            {
+                var net = nets[i];
+                var marker = i == activeIndex ? $"{TerminalUi.Green}●{TerminalUi.Reset}" : " ";
+                Console.WriteLine($"  {marker} {TerminalUi.Bold}{net.Label,-26}{TerminalUi.Reset} {TerminalUi.Cyan}{net.Origin}{TerminalUi.Reset}");
+            }
+            if (state.ShortPin is { } pin)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"  {TerminalUi.Muted}TLS Certificate Fingerprint:{TerminalUi.Reset} {TerminalUi.Bold}{pin}{TerminalUi.Reset}  {TerminalUi.Muted}({state.Pin}){TerminalUi.Reset}");
+            }
+            Console.WriteLine();
+            Console.WriteLine($"  {TerminalUi.Bold}QR Code for {current.Label} ({current.Origin}):{TerminalUi.Reset}");
+            Console.WriteLine();
+            Console.Write(Qr.Terminal(current.Origin));
+            Console.WriteLine();
+
+            if (nets.Count <= 1)
+            {
+                TerminalUi.Pause();
+                return Task.CompletedTask;
+            }
+
+            var switchOpts = new List<SelectOption<int>>();
+            for (var i = 0; i < nets.Count; i++)
+            {
+                if (i == activeIndex) continue;
+                switchOpts.Add(new($"📱 Show QR code for {nets[i].Label}", i, nets[i].Origin));
+            }
+            switchOpts.Add(new("← Back to main menu", -1));
+
+            var (ok, nextIndex) = TerminalUi.Select("Switch QR code network or return", switchOpts);
+            if (!ok || nextIndex < 0) return Task.CompletedTask;
+            activeIndex = nextIndex;
+        }
+    }
+
     private static async Task RunFirstSetupWizardAsync(HttpClient http, CliStateDto state)
     {
         DrawStatusHeader(state);
@@ -126,7 +187,7 @@ public static class InteractiveConfigurator
         var (selected, mode) = TerminalUi.Select<string>(
             "How would you like to set up your Penrill Server?",
             [
-                new("⚡ Configure right here in the terminal (recommended)", "terminal", "Create owner account, server name & password now"),
+                new("⚡ Configure right here in the terminal (recommended)", "terminal", "Choose networks, create owner account & password now"),
                 new("🌐 Finish setup in a web browser", "browser", "Print a one-time setup link & QR code"),
                 new("⏭️  Skip for now", "skip", "Go to the main management menu")
             ]);
@@ -148,6 +209,9 @@ public static class InteractiveConfigurator
             validate: v => v.Length is > 0 and <= AdminService.MaxServerName ? null : "Enter 1 to 64 characters.");
         if (serverName is null) return;
 
+        var chosenNetworks = PickNetworksInteractive(state);
+        if (chosenNetworks is null) return;
+
         var username = TerminalUi.Prompt(
             "Owner username",
             defaultValue: "admin",
@@ -163,7 +227,8 @@ public static class InteractiveConfigurator
             validate: v => AdminService.CleanEmail(v) is not null ? null : "Enter a valid email address (e.g. name@example.com).");
         if (email is null) return;
 
-        var response = await http.PostAsJsonAsync("/cli/json/claim", new CliClaimRequest(username, password, serverName, email));
+        var networksCsv = string.Join(',', chosenNetworks);
+        var response = await http.PostAsJsonAsync("/cli/json/claim", new CliClaimRequest(username, password, serverName, email, networksCsv));
         var body = (await response.Content.ReadAsStringAsync()).Trim();
         Console.WriteLine();
         if (!response.IsSuccessStatusCode)
@@ -175,8 +240,82 @@ public static class InteractiveConfigurator
 
         TerminalUi.Success($"Owner account '{AccountService.Normalize(username)}' created and server '{serverName}' is ready!");
         Console.WriteLine();
-        await RunCliVerbAsync(http, "link", []);
-        TerminalUi.Pause("Setup complete! Press Enter to open the Control Center...");
+        var updatedState = await FetchStateAsync(http);
+        if (updatedState is not null)
+            await ShowConnectScreenAsync(updatedState);
+        else
+            await RunCliVerbAsync(http, "link", []);
+    }
+
+    private static List<string>? PickNetworksInteractive(CliStateDto state)
+    {
+        var activeSet = state.ActiveNetworks.Select(a => a.Origin).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var allCandidates = new List<CliNetworkDto>(state.DiscoveredNetworks);
+        foreach (var active in state.ActiveNetworks)
+        {
+            if (allCandidates.All(c => !string.Equals(c.Origin, active.Origin, StringComparison.OrdinalIgnoreCase)))
+                allCandidates.Add(active);
+        }
+
+        var items = allCandidates
+            .Select(n => (
+                new SelectOption<string>(n.Label, n.Origin, n.Origin),
+                activeSet.Count > 0 ? activeSet.Contains(n.Origin) : n.DefaultEnabled))
+            .Append((
+                new SelectOption<string>("+ Add custom domain, Tailscale DNS or IP...", "+custom", "Enter any extra address or hostname"),
+                false))
+            .ToList();
+
+        var (ok, picked) = TerminalUi.MultiSelect(
+            "Which networks should Penrill Server use?",
+            items,
+            hint: "↑/↓ move · Space toggle · Enter confirm");
+        if (!ok) return null;
+
+        var result = picked.Where(p => p != "+custom").ToList();
+        if (picked.Contains("+custom"))
+        {
+            var scheme = state.Lan ? "https" : "http";
+            var customRaw = TerminalUi.Prompt(
+                "Custom hostname, IP or URL (comma-separated for multiple)",
+                placeholder: $"e.g. my-pi.tail123.ts.net or 100.92.x.x:{state.Port}",
+                validate: v =>
+                {
+                    var parts = v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    return parts.Length > 0 && parts.All(p => ServerAddress.NormalizeOrigin(p, state.Port, scheme) is not null)
+                        ? null
+                        : "Enter a valid hostname, IP address or URL.";
+                });
+            if (customRaw is null) return null;
+            foreach (var part in customRaw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (ServerAddress.NormalizeOrigin(part, state.Port, scheme) is { } norm &&
+                    !result.Contains(norm, StringComparer.OrdinalIgnoreCase))
+                    result.Add(norm);
+            }
+        }
+
+        if (result.Count == 0 && allCandidates.Count > 0)
+            result.Add(allCandidates[0].Origin);
+
+        if (result.Count > 1)
+        {
+            var primaryOpts = result
+                .Select(origin =>
+                {
+                    var label = allCandidates.FirstOrDefault(c => string.Equals(c.Origin, origin, StringComparison.OrdinalIgnoreCase))?.Label ?? "Custom";
+                    return new SelectOption<string>($"{label} ({origin})", origin, "Shown first & used for default QR code");
+                })
+                .ToList();
+            var (pOk, primary) = TerminalUi.Select("Which address should be the primary default?", primaryOpts);
+            if (pOk && !string.IsNullOrEmpty(primary))
+            {
+                result.RemoveAll(r => string.Equals(r, primary, StringComparison.OrdinalIgnoreCase));
+                result.Insert(0, primary);
+            }
+        }
+
+        return result;
     }
 
     private static async Task ManageUsersAsync(HttpClient http)
@@ -248,7 +387,7 @@ public static class InteractiveConfigurator
         var actions = new List<SelectOption<string>>
         {
             new("🔑 Set a new password right now", "set-password", "Change password immediately in terminal"),
-            new("🔗 Generate 1-hour password reset link & QR code", "reset-link", "Let the user pick their own password in browser")
+            new("🔗 Generate 1-hour password reset link & QR code", "reset-link", "Prints reset links for all enabled networks")
         };
 
         if (!isOwner)
@@ -317,7 +456,7 @@ public static class InteractiveConfigurator
             TerminalUi.Header("Invite Links", $"{state.Invites.Count} active invite(s)");
             var options = new List<SelectOption<string>>
             {
-                new("✉️  Create single-use invite (1 person, 7 days)", "quick-1", "Standard member invite link & QR code"),
+                new("✉️  Create single-use invite (1 person, 7 days)", "quick-1", "Prints invite link for all active networks + QR code"),
                 new("🏫 Create classroom / team invite (25 uses, 7 days)", "quick-25", "Multi-use member invite link & QR code"),
                 new("⚙️  Create custom invite...", "custom", "Choose role (Member/Admin), uses and expiration days")
             };
@@ -498,19 +637,33 @@ public static class InteractiveConfigurator
         while (true)
         {
             var fresh = await FetchStateAsync(http) ?? state;
-            TerminalUi.Header("Server Settings");
+            var activeLabels = string.Join(", ", fresh.ActiveNetworks.Select(n => $"{n.Label} ({n.Origin})"));
+            TerminalUi.Header("Networks & Server Settings");
             var (selected, choice) = TerminalUi.Select<string>(
                 "Choose a setting to configure",
                 [
+                    new("🌍 Select Active Networks (LAN, Tailscale, mDNS, Custom)", "networks", $"Active: {activeLabels}"),
                     new("✏️  Server display name", "rename", $"Current: {fresh.ServerName}"),
                     new("📧 Administrator contact email", "email", $"Current: {fresh.Email ?? "(not set)"}"),
-                    new("🌐 Network port, HTTPS mode & registration policy", "network", $"Current: {fresh.Origin} ({(fresh.Lan ? "LAN HTTPS" : "Local HTTP")})"),
+                    new("🔌 Listening TCP port, HTTPS mode & registration policy", "daemon-env", $"Current: port {fresh.Port} ({(fresh.Lan ? "LAN HTTPS" : "Local HTTP")})"),
                     new("← Back to main menu", "back")
                 ]);
 
             if (!selected || choice == "back") return;
 
-            if (choice == "rename")
+            if (choice == "networks")
+            {
+                Console.WriteLine();
+                var picked = PickNetworksInteractive(fresh);
+                if (picked is null || picked.Count == 0) continue;
+                var resp = await http.PostAsJsonAsync("/cli/json/networks", picked.ToArray());
+                var msg = (await resp.Content.ReadAsStringAsync()).Trim();
+                Console.WriteLine();
+                if (resp.IsSuccessStatusCode) TerminalUi.Success(msg);
+                else TerminalUi.Error(msg);
+                TerminalUi.Pause();
+            }
+            else if (choice == "rename")
             {
                 var name = TerminalUi.Prompt(
                     "New server display name",
@@ -532,7 +685,7 @@ public static class InteractiveConfigurator
                 await RunCliVerbAsync(http, "email", [email], useIcons: true);
                 TerminalUi.Pause();
             }
-            else if (choice == "network")
+            else if (choice == "daemon-env")
             {
                 await ConfigureServiceEnvironmentAsync(fresh);
                 return;
@@ -546,16 +699,15 @@ public static class InteractiveConfigurator
         var (modeOk, addressMode) = TerminalUi.Select<string>(
             "Network listening mode",
             [
-                new("🔒 LAN HTTPS on all interfaces (recommended)", "lan", "Self-signed pinned TLS certificate, accessible on local network"),
+                new("🔒 HTTPS on all interfaces — LAN, Tailscale & VPN (recommended)", "lan", "Self-signed pinned TLS certificate on every network interface"),
                 new("🏠 Local HTTP on 127.0.0.1 only", "local", "Use behind a local reverse proxy (Caddy, Nginx, Cloudflare Tunnel)")
             ],
             initialIndex: state.Lan ? 0 : 1);
         if (!modeOk) return;
 
-        var currentPort = Uri.TryCreate(state.Origin, UriKind.Absolute, out var uri) && uri.Port > 0 ? uri.Port.ToString(CultureInfo.InvariantCulture) : "5081";
         var port = TerminalUi.Prompt(
             "Listening TCP port",
-            defaultValue: currentPort,
+            defaultValue: state.Port.ToString(CultureInfo.InvariantCulture),
             validate: v => int.TryParse(v, out var p) && p is >= 1 and <= 65535 ? null : "Enter a port between 1 and 65535.");
         if (port is null) return;
 

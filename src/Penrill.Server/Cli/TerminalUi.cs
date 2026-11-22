@@ -165,6 +165,114 @@ public static partial class TerminalUi
         }
     }
 
+    public static (bool Selected, IReadOnlyList<T> Values) MultiSelect<T>(
+        string title,
+        IReadOnlyList<(SelectOption<T> Option, bool InitialChecked)> items,
+        string? hint = null)
+    {
+        if (items.Count == 0) return (false, []);
+        if (!IsInteractive)
+        {
+            var defaults = items.Where(i => i.InitialChecked).Select(i => i.Option.Value).ToList();
+            return (true, defaults.Count > 0 ? defaults : [items[0].Option.Value]);
+        }
+
+        EnsureCursorRestoredOnExit();
+        var index = 0;
+        var checks = items.Select(i => i.InitialChecked).ToArray();
+        var maxLabel = items.Max(i => VisibleLength(i.Option.Label));
+        var hintText = hint ?? "↑/↓ move · Space toggle · Enter confirm · Esc cancel";
+
+        Console.Out.Write("\x1b[?25l");
+        var renderedLines = 0;
+
+        void Render()
+        {
+            if (renderedLines > 0)
+            {
+                for (var i = 0; i < renderedLines; i++)
+                    Console.Out.Write("\x1b[1A\r\x1b[2K");
+            }
+            var lines = new List<string>
+            {
+                $"  {Cyan}?{Reset} {Bold}{title}{Reset}  {Muted}({hintText}){Reset}"
+            };
+            for (var i = 0; i < items.Count; i++)
+            {
+                var opt = items[i].Option;
+                var active = i == index;
+                var isChecked = checks[i];
+                var box = isChecked ? $"{Green}[✓]{Reset}" : $"{Muted}[ ]{Reset}";
+                var pad = new string(' ', Math.Max(2, maxLabel - VisibleLength(opt.Label) + 3));
+                var detail = opt.Detail is { Length: > 0 } d ? $"{pad}{Muted}{d}{Reset}" : "";
+                lines.Add(active
+                    ? $"  {Cyan}❯{Reset} {box} {Bold}{Cyan}{opt.Label}{Reset}{detail}"
+                    : $"    {box} {opt.Label}{detail}");
+            }
+            foreach (var line in lines) Console.WriteLine(line);
+            renderedLines = lines.Count;
+        }
+
+        try
+        {
+            Render();
+            while (true)
+            {
+                var key = Console.ReadKey(intercept: true);
+                switch (key.Key)
+                {
+                    case ConsoleKey.UpArrow or ConsoleKey.K:
+                        index = (index - 1 + items.Count) % items.Count;
+                        Render();
+                        break;
+                    case ConsoleKey.DownArrow or ConsoleKey.J:
+                        index = (index + 1) % items.Count;
+                        Render();
+                        break;
+                    case ConsoleKey.Spacebar:
+                        checks[index] = !checks[index];
+                        Render();
+                        break;
+                    case ConsoleKey.A:
+                        var allChecked = checks.All(c => c);
+                        for (var i = 0; i < checks.Length; i++) checks[i] = !allChecked;
+                        Render();
+                        break;
+                    case ConsoleKey.Enter:
+                        if (!checks.Any(c => c)) checks[index] = true;
+                        for (var i = 0; i < renderedLines; i++)
+                            Console.Out.Write("\x1b[1A\r\x1b[2K");
+                        renderedLines = 0;
+                        var chosenLabels = items.Where((_, i) => checks[i]).Select(x => x.Option.Label).ToList();
+                        var chosenValues = items.Where((_, i) => checks[i]).Select(x => x.Option.Value).ToList();
+                        Console.WriteLine($"  {Green}✓{Reset} {Bold}{title}{Reset} {Muted}›{Reset} {Cyan}{string.Join(", ", chosenLabels)}{Reset}");
+                        return (true, chosenValues);
+                    case ConsoleKey.Escape or ConsoleKey.Q:
+                        for (var i = 0; i < renderedLines; i++)
+                            Console.Out.Write("\x1b[1A\r\x1b[2K");
+                        renderedLines = 0;
+                        return (false, []);
+                    default:
+                        if (key.KeyChar is >= '1' and <= '9')
+                        {
+                            var num = key.KeyChar - '1';
+                            if (num < items.Count)
+                            {
+                                index = num;
+                                checks[num] = !checks[num];
+                                Render();
+                            }
+                        }
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            Console.Out.Write("\x1b[?25h");
+        }
+    }
+
     public static bool Confirm(string question, string yesLabel = "Yes, proceed", string noLabel = "No, cancel", bool defaultYes = false)
     {
         var (selected, value) = Select(

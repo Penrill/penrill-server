@@ -1,6 +1,9 @@
+using System.Diagnostics;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json.Nodes;
 using Penrill.Api.Hosting;
 using QRCoder;
 
@@ -9,13 +12,17 @@ namespace Penrill.Server.Hosting;
 /// <summary>
 /// How people reach this server. <see cref="Local"/> listens on loopback over plain HTTP (development,
 /// or behind a reverse proxy on the same machine); <see cref="Lan"/> listens on every interface with
-/// the pinned self-signed certificate. Domain and Penrill address modes slot in here later.
+/// the pinned self-signed certificate.
 /// </summary>
 public enum AddressMode { Local, Lan }
+
+public sealed record NetworkEndpoint(string Label, string Kind, string Origin, bool DefaultEnabled);
 
 public sealed class ServerAddress(AddressMode mode, string localOrigin, int port, ServerCertificate? certificate) : IPublicAddress
 {
     public AddressMode Mode => mode;
+
+    public int Port => port;
 
     public string? Pin => certificate?.Pin;
 
@@ -32,6 +39,175 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
         return host is "localhost" || IPAddress.TryParse(host.Trim('[', ']'), out var ip) && IPAddress.IsLoopback(ip)
             ? DefaultOrigin
             : $"https://{request.Host}";
+    }
+
+    public void RefreshCertificate(IEnumerable<string> origins) => certificate?.UpdateExtraOrigins(origins);
+
+    public IReadOnlyList<NetworkEndpoint> DiscoverEndpoints()
+    {
+        if (mode == AddressMode.Local)
+            return [new NetworkEndpoint("Local loopback", "local", localOrigin, true)];
+
+        var list = new List<NetworkEndpoint>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string label, string kind, string origin, bool defaultEnabled)
+        {
+            if (seen.Add(origin))
+                list.Add(new NetworkEndpoint(label, kind, origin, defaultEnabled));
+        }
+
+        var primaryIp = PrimaryAddress();
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (nic.OperationalStatus != OperationalStatus.Up || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                continue;
+            var name = nic.Name;
+            if (IsContainerBridge(name)) continue;
+
+            foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
+            {
+                var ip = unicast.Address;
+                if (ip.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(ip)) continue;
+                var origin = $"https://{ip}:{port}";
+                if (IsTailscale(name, ip))
+                    Add($"Tailscale ({name})", "tailscale", origin, true);
+                else if (IsVpnInterface(name))
+                    Add($"VPN ({name})", "vpn", origin, true);
+                else
+                    Add($"LAN ({name})", "lan", origin, true);
+            }
+        }
+
+        // Ensure primary LAN IP is first if discovered.
+        var primaryOrigin = $"https://{Bracket(primaryIp)}:{port}";
+        var primaryIndex = list.FindIndex(e => string.Equals(e.Origin, primaryOrigin, StringComparison.OrdinalIgnoreCase));
+        if (primaryIndex > 0)
+        {
+            var item = list[primaryIndex];
+            list.RemoveAt(primaryIndex);
+            list.Insert(0, item);
+        }
+        else if (primaryIndex < 0 && !IPAddress.IsLoopback(primaryIp))
+        {
+            Add("LAN", "lan", primaryOrigin, true);
+        }
+
+        if (TryGetTailscaleDnsName() is { } tsDns)
+            Add("Tailscale MagicDNS", "tailscale-dns", $"https://{tsDns}:{port}", true);
+
+        var host = Dns.GetHostName();
+        if (!string.IsNullOrWhiteSpace(host))
+        {
+            var mdns = host.EndsWith(".local", StringComparison.OrdinalIgnoreCase) ? host : host + ".local";
+            Add("Local mDNS (.local)", "mdns", $"https://{mdns}:{port}", false);
+        }
+
+        if (list.Count == 0)
+            Add("Local", "lan", DefaultOrigin, true);
+
+        return list;
+    }
+
+    public IReadOnlyList<NetworkEndpoint> ActiveEndpoints(string? savedOriginsCsv)
+    {
+        var discovered = DiscoverEndpoints();
+        if (string.IsNullOrWhiteSpace(savedOriginsCsv))
+        {
+            var defaults = discovered.Where(d => d.DefaultEnabled).ToList();
+            return defaults.Count > 0 ? defaults : [discovered[0]];
+        }
+
+        var byOrigin = discovered.ToDictionary(d => d.Origin, StringComparer.OrdinalIgnoreCase);
+        var active = new List<NetworkEndpoint>();
+        foreach (var raw in savedOriginsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var origin = NormalizeOrigin(raw, port, mode == AddressMode.Lan ? "https" : "http");
+            if (origin is null) continue;
+            if (byOrigin.TryGetValue(origin, out var match))
+                active.Add(match);
+            else
+                active.Add(new NetworkEndpoint(ClassifyCustomOrigin(origin), "custom", origin, true));
+        }
+
+        return active.Count > 0 ? active : [discovered[0]];
+    }
+
+    public static string? NormalizeOrigin(string? input, int defaultPort, string defaultScheme = "https")
+    {
+        var clean = (input ?? "").Trim().TrimEnd('/');
+        if (clean.Length == 0) return null;
+        if (!clean.Contains("://", StringComparison.Ordinal))
+            clean = $"{defaultScheme}://{clean}";
+        if (!Uri.TryCreate(clean, UriKind.Absolute, out var uri) || string.IsNullOrWhiteSpace(uri.Host))
+            return null;
+        var hasExplicitPort = clean.Split("://")[1].Contains(':', StringComparison.Ordinal);
+        var finalPort = hasExplicitPort ? uri.Port : defaultPort;
+        var host = uri.HostNameType == UriHostNameType.IPv6 ? $"[{uri.Host.Trim('[', ']')}]" : uri.Host;
+        return finalPort is 80 or 443 && ((uri.Scheme == "http" && finalPort == 80) || (uri.Scheme == "https" && finalPort == 443))
+            ? $"{uri.Scheme}://{host}"
+            : $"{uri.Scheme}://{host}:{finalPort}";
+    }
+
+    private static string ClassifyCustomOrigin(string origin)
+    {
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return "Custom";
+        if (uri.Host.EndsWith(".ts.net", StringComparison.OrdinalIgnoreCase)) return "Tailscale MagicDNS";
+        if (uri.Host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)) return "Local mDNS (.local)";
+        if (IPAddress.TryParse(uri.Host.Trim('[', ']'), out var ip) && IsTailscale("", ip)) return "Tailscale";
+        return "Custom";
+    }
+
+    private static bool IsTailscale(string nicName, IPAddress ip)
+    {
+        if (nicName.StartsWith("tailscale", StringComparison.OrdinalIgnoreCase)) return true;
+        if (ip.AddressFamily != AddressFamily.InterNetwork) return false;
+        var bytes = ip.GetAddressBytes();
+        // Tailscale uses CGNAT range 100.64.0.0/10
+        return bytes[0] == 100 && bytes[1] is >= 64 and <= 127;
+    }
+
+    private static bool IsVpnInterface(string nicName) =>
+        nicName.StartsWith("wg", StringComparison.OrdinalIgnoreCase) ||
+        nicName.StartsWith("tun", StringComparison.OrdinalIgnoreCase) ||
+        nicName.StartsWith("tap", StringComparison.OrdinalIgnoreCase) ||
+        nicName.StartsWith("zt", StringComparison.OrdinalIgnoreCase) ||
+        nicName.StartsWith("nebula", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsContainerBridge(string nicName) =>
+        nicName.StartsWith("docker", StringComparison.OrdinalIgnoreCase) ||
+        nicName.StartsWith("br-", StringComparison.OrdinalIgnoreCase) ||
+        nicName.StartsWith("veth", StringComparison.OrdinalIgnoreCase) ||
+        nicName.StartsWith("virbr", StringComparison.OrdinalIgnoreCase) ||
+        nicName.StartsWith("cni", StringComparison.OrdinalIgnoreCase);
+
+    public static string? TryGetTailscaleDnsName()
+    {
+        try
+        {
+            var bin = File.Exists("/usr/bin/tailscale") ? "/usr/bin/tailscale"
+                : File.Exists("/usr/local/bin/tailscale") ? "/usr/local/bin/tailscale"
+                : null;
+            if (bin is null) return null;
+            var psi = new ProcessStartInfo(bin, ["status", "--json"])
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            using var proc = Process.Start(psi);
+            if (proc is null) return null;
+            var output = proc.StandardOutput.ReadToEnd();
+            if (!proc.WaitForExit(1200) || proc.ExitCode != 0) return null;
+            var json = JsonNode.Parse(output)?.AsObject();
+            var dns = (string?)json?["Self"]?["DNSName"];
+            dns = dns?.Trim().TrimEnd('.');
+            return !string.IsNullOrWhiteSpace(dns) ? dns : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>The address of the interface that holds the default route. No packet is sent: connecting a UDP socket only picks a route.</summary>
