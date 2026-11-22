@@ -13,6 +13,17 @@ internal sealed class SqliteAdminStore(SqliteDatabase database) : IAdminStore, I
             row => new OrphanBoard(row.GetString(0), row.GetString(1), SqliteCommands.ParseStamp(row.GetString(2)))));
     }
 
+    public Task<IReadOnlyList<AdminBoard>> Boards(CancellationToken cancel)
+    {
+        using var db = database.Open();
+        return Task.FromResult<IReadOnlyList<AdminBoard>>(db.Rows("""
+            SELECT boards.id, boards.title, coalesce(owners.user, ''), boards.seq, boards.updated
+            FROM boards LEFT JOIN owners ON owners.board=boards.id
+            ORDER BY boards.updated DESC, boards.id
+            """,
+            row => new AdminBoard(row.GetString(0), row.GetString(1), row.GetString(2), row.GetInt64(3), SqliteCommands.ParseStamp(row.GetString(4)))));
+    }
+
     public Task<bool> AssignOwner(string board, string user, CancellationToken cancel)
     {
         using var db = database.Open();
@@ -20,6 +31,27 @@ internal sealed class SqliteAdminStore(SqliteDatabase database) : IAdminStore, I
             INSERT OR IGNORE INTO owners(board, user)
             SELECT boards.id, accounts.name FROM boards, accounts WHERE boards.id=$board AND accounts.name=$user
             """, ("board", board), ("user", user)) == 1);
+    }
+
+    public Task<bool> SetOwner(string board, string user, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        return Task.FromResult(db.Execute("""
+            INSERT OR REPLACE INTO owners(board, user)
+            SELECT boards.id, accounts.name FROM boards, accounts WHERE boards.id=$board AND accounts.name=$user
+            """, ("board", board), ("user", user)) == 1);
+    }
+
+    public Task<bool> DeleteBoard(string board, CancellationToken cancel)
+    {
+        using var db = database.Open();
+        using var transaction = db.BeginTransaction();
+        if (db.Scalar("SELECT 1 FROM boards WHERE id=$id", ("id", board)) is null) return Task.FromResult(false);
+        foreach (var table in (string[])["changes", "assets", "owners", "folder_boards", "board_people", "board_links"])
+            db.Execute($"DELETE FROM {table} WHERE board=$id", ("id", board));
+        db.Execute("DELETE FROM boards WHERE id=$id", ("id", board));
+        transaction.Commit();
+        return Task.FromResult(true);
     }
 
     public Task<ServerCounts> Counts(CancellationToken cancel)

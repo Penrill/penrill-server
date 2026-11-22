@@ -8,10 +8,13 @@ if [ "$1" = configure ] && [ -d /run/systemd/system ]; then
         systemctl try-restart penrill-server.service
     fi
     systemctl try-reload-or-restart avahi-daemon.service 2>/dev/null || true
-    # A fresh server has no owner yet: show the setup link right here instead of sending people to the journal.
+    # Wait for the admin socket to come up.
     i=0
     while [ ! -S /run/penrill-server/admin.sock ] && [ $i -lt 30 ]; do sleep 0.5; i=$((i + 1)); done
-    if /usr/bin/penrill-server status 2>/dev/null | grep -q "none yet"; then
-        /usr/bin/penrill-server setup || true
+    if [ -z "${PENRILL_INSTALLER:-}" ]; then
+        if /usr/bin/penrill-server status 2>/dev/null | grep -q "none yet"; then
+            /usr/bin/penrill-server setup || true
+        fi
+        printf '\n  Run "sudo penrill-server" anytime to open the interactive configurator & control panel.\n\n'
     fi
 fi

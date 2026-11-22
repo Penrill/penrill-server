@@ -25,13 +25,13 @@ internal static class AccountEndpoints
             await accounts.SignOut(user.FindFirstValue(BearerSessionHandler.TokenHashClaim)!, cancel);
             return Results.NoContent();
         });
-        api.MapGet("/server", async (AccountService accounts, AdminService admin, IPublicAddress address, CancellationToken cancel) => Results.Ok(new
+        api.MapGet("/server", async (HttpContext context, AccountService accounts, AdminService admin, IPublicAddress address, CancellationToken cancel) => Results.Ok(new
         {
             service = "penrill",
             name = await admin.ServerName(cancel),
             registration = accounts.OpenRegistration ? "open" : "invite",
             link = true,
-            pin = address.Pin
+            pin = address.PinFor(context.Request)
         })).AllowAnonymous();
     }
 

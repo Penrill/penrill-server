@@ -11,4 +11,4 @@ if command -v snapctl >/dev/null 2>&1; then
     [ -n "$address_mode" ] && export PENRILL_ADDRESS_MODE="$address_mode"
 fi
 cd "$SNAP/lib/penrill-server"
-exec "$SNAP/lib/penrill-server/Penrill.Server" "$@"
+exec "$SNAP/lib/penrill-server/Penrill.Server" --serve "$@"
