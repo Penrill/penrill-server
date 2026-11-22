@@ -273,12 +273,17 @@ public static class InteractiveConfigurator
             "Would you like to connect a public domain & Let's Encrypt SSL now (for internet & guest board sharing)?",
             [
                 new("⏭️  Skip for now (use LAN / Tailscale first)", "skip", "You can always set up a public domain later from the main menu"),
+                new("📡 Yes — Enable Tailscale Funnel (Best for Starlink / CGNAT)", "funnel", "Exposes https://<your-pi>.ts.net on port 443 to internet guests without port forwarding"),
                 new("🦆 Yes — connect a free *.duckdns.org domain (DuckDNS + Auto Let's Encrypt SSL)", "duckdns", "1-click GitHub/Google sign-in on duckdns.org + auto browser-trusted SSL"),
-                new("🌐 Yes — connect a domain on deSEC DNS (Auto Let's Encrypt SSL)", "desec", "For custom domains delegated to desec.io or existing *.dedyn.io domains")
+                new("🌐 Yes — connect a domain on deSEC DNS (Auto Let's Encrypt SSL)", "desec", "For custom domains delegated to desec.io")
             ]);
-        if (wantDomainOk && wantDomain == "duckdns")
+        if (wantDomainOk && wantDomain == "funnel")
         {
-            await RunDuckDnsSetupWizardAsync(http, null);
+            await RunTailscaleFunnelSetupWizardAsync(http, state);
+        }
+        else if (wantDomainOk && wantDomain == "duckdns")
+        {
+            await RunDuckDnsSetupWizardAsync(http, null, state);
         }
         else if (wantDomainOk && wantDomain == "desec")
         {
@@ -777,8 +782,10 @@ public static class InteractiveConfigurator
 
             var options = new List<SelectOption<string>>
             {
+                new("📡 Enable Tailscale Funnel (Bypass Starlink / CGNAT — Zero Port Forwarding)", "funnel",
+                    "Public https://<host>.ts.net on port 443 with Let's Encrypt SSL (guests do NOT need Tailscale!)"),
                 new("🦆 Connect free *.duckdns.org domain (DuckDNS + Auto Let's Encrypt SSL)", "duckdns",
-                    "Recommended: 1-click login on duckdns.org + auto DDNS + real Let's Encrypt SSL (no port 80 needed!)"),
+                    "1-click login on duckdns.org + auto DDNS + real Let's Encrypt SSL (no port 80 needed!)"),
                 new("🌐 Connect domain via deSEC DNS (Managed DNS + Auto Let's Encrypt SSL)", "desec",
                     "For custom domains delegated to desec.io or existing *.dedyn.io domains")
             };
@@ -809,9 +816,13 @@ public static class InteractiveConfigurator
             var (selected, action) = TerminalUi.Select("Public Domain & Guest Board Sharing Setup", options);
             if (!selected || action == "back") return;
 
-            if (action == "duckdns")
+            if (action == "funnel")
             {
-                await RunDuckDnsSetupWizardAsync(http, status);
+                await RunTailscaleFunnelSetupWizardAsync(http, state);
+            }
+            else if (action == "duckdns")
+            {
+                await RunDuckDnsSetupWizardAsync(http, status, state);
             }
             else if (action == "desec")
             {
@@ -853,6 +864,10 @@ public static class InteractiveConfigurator
                 if (TerminalUi.Confirm($"Remove public domain '{domToRemove}' and its SSL certificate from Penrill Server?",
                     yesLabel: $"Yes, remove {domToRemove}"))
                 {
+                    if (status.Provider == "tailscale-funnel")
+                    {
+                        RunProcess("tailscale", ["funnel", "--https=443", "off"]);
+                    }
                     await http.PostAsync("/cli/json/domain/remove", null);
                     Console.WriteLine();
                     TerminalUi.Success("Public domain configuration removed.");
@@ -862,7 +877,59 @@ public static class InteractiveConfigurator
         }
     }
 
-    private static async Task RunDuckDnsSetupWizardAsync(HttpClient http, PublicDomainStatusDto? current)
+    private static async Task RunTailscaleFunnelSetupWizardAsync(HttpClient http, CliStateDto state)
+    {
+        TerminalUi.Header(
+            "Enable Tailscale Funnel (Bypass Starlink & CGNAT)",
+            "Exposes your server at https://<your-pi>.ts.net with Let's Encrypt SSL — guests do NOT need Tailscale");
+        Console.WriteLine();
+
+        var tsDns = ServerAddress.TryGetTailscaleDnsName();
+        if (string.IsNullOrWhiteSpace(tsDns))
+        {
+            TerminalUi.Error("Tailscale is not running or not logged in on this machine.");
+            Console.WriteLine($"  Run {TerminalUi.Cyan}sudo tailscale up{TerminalUi.Reset} first, then try again.");
+            TerminalUi.Pause();
+            return;
+        }
+
+        Console.WriteLine($"  {TerminalUi.Bold}Detected Tailscale MagicDNS:{TerminalUi.Reset} {TerminalUi.Cyan}https://{tsDns}{TerminalUi.Reset}");
+        Console.WriteLine($"  {TerminalUi.Muted}Tailscale Funnel routes public internet HTTPS traffic (port 443) straight to Penrill Server (port {state.Port}){TerminalUi.Reset}");
+        Console.WriteLine($"  {TerminalUi.Muted}through your outbound Tailscale connection — bypassing Starlink Mini CGNAT without any port forwarding!{TerminalUi.Reset}");
+        Console.WriteLine();
+
+        if (!TerminalUi.Confirm($"Enable public internet access via Tailscale Funnel at https://{tsDns}?",
+            yesLabel: $"Yes, enable Tailscale Funnel (https://{tsDns})"))
+            return;
+
+        Console.WriteLine();
+        TerminalUi.Info($"Running: tailscale funnel --bg https+insecure://127.0.0.1:{state.Port}");
+        Console.WriteLine($"  {TerminalUi.Amber}Note: If Tailscale prints a https://login.tailscale.com/... link below, open it in your browser to authorize Funnel.{TerminalUi.Reset}");
+        Console.WriteLine();
+
+        var exitCode = RunProcessWithExitCode("tailscale", ["funnel", "--bg", $"https+insecure://127.0.0.1:{state.Port}"]);
+        Console.WriteLine();
+        if (exitCode != 0)
+        {
+            TerminalUi.Warn($"'tailscale funnel' exited with code {exitCode}. Make sure HTTPS Certificates and Funnel are enabled in your Tailscale Admin Console (DNS & Access Controls).");
+            TerminalUi.Pause();
+            return;
+        }
+
+        var resp = await http.PostAsJsonAsync("/cli/json/domain/tailscale-funnel", new CliTailscaleFunnelRequest(tsDns));
+        var res = await resp.Content.ReadFromJsonAsync<DomainSetupResultDto>();
+        if (res is not null)
+        {
+            foreach (var step in res.Steps)
+                TerminalUi.Success(step);
+            Console.WriteLine();
+            if (res.Ok) TerminalUi.Success(res.Message);
+            else TerminalUi.Error(res.Message);
+        }
+        TerminalUi.Pause();
+    }
+
+    private static async Task RunDuckDnsSetupWizardAsync(HttpClient http, PublicDomainStatusDto? current, CliStateDto state)
     {
         TerminalUi.Header(
             "Connect Free *.duckdns.org Domain (DuckDNS + Let's Encrypt)",
@@ -893,14 +960,33 @@ public static class InteractiveConfigurator
         if (token is null) return;
 
         var fullDomain = DuckDnsClient.NormalizeDomain(domainInput)!.Value.FullDomain;
+        var localIp = current?.LocalIp ?? ServerAddress.PrimaryAddress().ToString();
+        var publicIp = current?.PublicIp ?? "auto-detect";
+        var tsNet = state.DiscoveredNetworks.FirstOrDefault(n => n.Kind == "tailscale");
+        var tsIp = tsNet is not null && Uri.TryCreate(tsNet.Origin, UriKind.Absolute, out var tsUri) ? tsUri.Host : null;
+
+        var ipOptions = new List<SelectOption<string>>
+        {
+            new($"🌐 Public Internet IP ({publicIp}) — Auto-DDNS", "public", "For routers with a public IP & port forwarding"),
+            new($"🏠 Local LAN IP ({localIp})", localIp, $"Trusted Let's Encrypt HTTPS on your Wi-Fi / LAN (works behind Starlink/CGNAT!)")
+        };
+        if (!string.IsNullOrWhiteSpace(tsIp))
+        {
+            ipOptions.Add(new($"🔒 Tailscale IP ({tsIp})", tsIp, "Trusted Let's Encrypt HTTPS across your Tailscale devices"));
+        }
+
+        var (ipOk, chosenIpMode) = TerminalUi.Select($"Which IP address should {fullDomain} point to?", ipOptions);
+        if (!ipOk) return;
+        var targetIpOverride = chosenIpMode == "public" ? null : chosenIpMode;
+
         Console.WriteLine();
-        TerminalUi.Info($"Configuring {fullDomain}, updating DDNS IP, and requesting a Let's Encrypt SSL certificate via DNS-01...");
+        TerminalUi.Info($"Configuring {fullDomain}, updating DNS A record, and requesting a Let's Encrypt SSL certificate via DNS-01...");
         Console.WriteLine($"  {TerminalUi.Muted}(Waiting for DNS propagation and Let's Encrypt verification — usually takes 20–45 seconds){TerminalUi.Reset}");
         Console.WriteLine();
 
         var resp = await http.PostAsJsonAsync(
             "/cli/json/domain/duckdns",
-            new CliDuckDnsDomainRequest(fullDomain, token.Trim(), ForceRenew: false));
+            new CliDuckDnsDomainRequest(fullDomain, token.Trim(), ForceRenew: false, TargetIp: targetIpOverride));
         var res = await resp.Content.ReadFromJsonAsync<DomainSetupResultDto>();
         PrintDomainSetupResult(res);
         TerminalUi.Pause();
@@ -1389,7 +1475,10 @@ public static class InteractiveConfigurator
         }
     }
 
-    private static void RunProcess(string fileName, string[] args)
+    private static void RunProcess(string fileName, string[] args) =>
+        RunProcessWithExitCode(fileName, args);
+
+    private static int RunProcessWithExitCode(string fileName, string[] args)
     {
         try
         {
@@ -1397,10 +1486,12 @@ public static class InteractiveConfigurator
             foreach (var a in args) psi.ArgumentList.Add(a);
             using var proc = Process.Start(psi);
             proc?.WaitForExit();
+            return proc?.ExitCode ?? 1;
         }
         catch (Exception ex)
         {
             TerminalUi.Error($"Failed to run '{fileName}': {ex.Message}");
+            return 1;
         }
     }
 }

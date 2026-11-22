@@ -58,7 +58,8 @@ public sealed record CliStateDto(
     PublicDomainStatusDto? PublicDomain = null);
 
 public sealed record CliClaimRequest(string Name, string Password, string ServerName, string Email, string? Networks = null);
-public sealed record CliDuckDnsDomainRequest(string Domain, string? Token, bool ForceRenew = false);
+public sealed record CliDuckDnsDomainRequest(string Domain, string? Token, bool ForceRenew = false, string? TargetIp = null);
+public sealed record CliTailscaleFunnelRequest(string? Domain = null);
 public sealed record CliDesecDomainRequest(string Domain, string? Token, string? Email = null, string? Password = null, bool ForceRenew = false);
 public sealed record CliCustomCertRequest(string Domain, string FullChainPath, string PrivateKeyPath);
 
@@ -145,8 +146,11 @@ public static class AdminCommands
         cli.MapGet("/json/domain/status", async (DomainManager domainManager, CancellationToken cancel) =>
             Results.Ok(await domainManager.GetStatusAsync(cancel, detectPublicIp: true)));
 
+        cli.MapPost("/json/domain/tailscale-funnel", async (CliTailscaleFunnelRequest req, DomainManager domainManager, CancellationToken cancel) =>
+            Results.Ok(await domainManager.ConfigureTailscaleFunnelAsync(req.Domain, cancel)));
+
         cli.MapPost("/json/domain/duckdns", async (CliDuckDnsDomainRequest req, DomainManager domainManager, CancellationToken cancel) =>
-            Results.Ok(await domainManager.ConfigureDuckDnsAsync(req.Domain, req.Token, req.ForceRenew, cancel)));
+            Results.Ok(await domainManager.ConfigureDuckDnsAsync(req.Domain, req.Token, req.ForceRenew, cancel, req.TargetIp)));
 
         cli.MapPost("/json/domain/desec", async (CliDesecDomainRequest req, DomainManager domainManager, CancellationToken cancel) =>
             Results.Ok(await domainManager.ConfigureDesecAsync(req.Domain, req.Token, req.Email, req.Password, req.ForceRenew, cancel)));
@@ -282,6 +286,11 @@ public static class AdminCommands
         {
             await dm.RemoveDomainAsync(c.Cancel);
             return await Text("Public domain configuration removed.");
+        }
+        if (c.Flag("--funnel"))
+        {
+            var res = await dm.ConfigureTailscaleFunnelAsync(c.Positional(0), c.Cancel);
+            return res.Ok ? await Text(res.Message) : await Fail(res.Message);
         }
         if (c.Option("--duckdns") is { } duckDomain)
         {

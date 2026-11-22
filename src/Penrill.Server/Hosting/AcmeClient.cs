@@ -164,7 +164,7 @@ public sealed class AcmeClient
                     var challengeUrl = (string?)dnsChallenge["url"] ?? throw new InvalidOperationException("Missing dns-01 challenge URL.");
                     var txtDigest = ComputeDns01Digest(challengeToken, thumbprint);
 
-                    onProgress?.Invoke($"Publishing _acme-challenge.{domain} TXT record via deSEC API...");
+                    onProgress?.Invoke($"Publishing _acme-challenge.{domain} DNS TXT record...");
                     var (dnsOk, dnsError) = await setDnsTxtCallback(txtDigest, cancel);
                     if (!dnsOk)
                         return (false, null, null, dnsError ?? "Failed to publish _acme-challenge DNS TXT record.");

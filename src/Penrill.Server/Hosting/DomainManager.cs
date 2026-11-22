@@ -54,9 +54,14 @@ public sealed class DomainManager(
         var publicIp = lastPublicIp ?? (detectPublicIp ? await desec.DetectPublicIpv4Async(cancel) : null);
         if (publicIp is not null) lastPublicIp = publicIp;
         var localIp = ServerAddress.PrimaryAddress().ToString();
+        var isFunnel = string.Equals(provider, "tailscale-funnel", StringComparison.OrdinalIgnoreCase);
         var origin = !string.IsNullOrWhiteSpace(activeDomain)
-            ? (address.Port == 443 ? $"https://{activeDomain}" : $"https://{activeDomain}:{address.Port}")
+            ? (isFunnel || address.Port == 443 ? $"https://{activeDomain}" : $"https://{activeDomain}:{address.Port}")
             : null;
+        var hasTrusted = isFunnel
+            ? !string.IsNullOrWhiteSpace(activeDomain)
+            : (cert?.TrustedCertificate is not null && !string.IsNullOrWhiteSpace(activeDomain) && cert.IsTrustedHost(activeDomain));
+        var issuer = isFunnel ? "Tailscale Funnel (Let's Encrypt)" : cert?.TrustedIssuer;
         return new PublicDomainStatusDto(
             string.IsNullOrWhiteSpace(activeDomain) ? null : activeDomain,
             string.IsNullOrWhiteSpace(provider) ? null : provider,
@@ -64,16 +69,63 @@ public sealed class DomainManager(
             publicIp,
             localIp,
             address.Port,
-            cert?.TrustedCertificate is not null && !string.IsNullOrWhiteSpace(activeDomain) && cert.IsTrustedHost(activeDomain),
-            cert?.TrustedIssuer,
+            hasTrusted,
+            issuer,
             cert?.TrustedExpires);
+    }
+
+    public async Task<DomainSetupResultDto> ConfigureTailscaleFunnelAsync(
+        string? rawDomain,
+        CancellationToken cancel)
+    {
+        var steps = new List<string>();
+        var localIp = ServerAddress.PrimaryAddress().ToString();
+        var port = address.Port;
+        var domain = !string.IsNullOrWhiteSpace(rawDomain)
+            ? rawDomain.Trim().TrimEnd('.').ToLowerInvariant()
+            : ServerAddress.TryGetTailscaleDnsName();
+
+        if (string.IsNullOrWhiteSpace(domain))
+        {
+            return new DomainSetupResultDto(
+                false, null, null, lastPublicIp, localIp, port, false, false, false,
+                "Could not determine Tailscale MagicDNS hostname. Ensure Tailscale is connected ('sudo tailscale up').",
+                steps);
+        }
+
+        steps.Add($"Detected Tailscale MagicDNS hostname: {domain}");
+        address.SetCustomPublicDomain(domain, "tailscale-funnel");
+        await admin.SetDomainConfig(domain, "tailscale-funnel", "", cancel);
+
+        var origin = $"https://{domain}";
+        await PrependActiveNetworkAsync(origin, cancel);
+        steps.Add($"Configured primary public origin: {origin} (port 443 via Tailscale Funnel)");
+
+        var reachable = await ProbeExternalReachabilityAsync(origin, cancel);
+        steps.Add(reachable
+            ? $"Verified public HTTPS connectivity to {origin}/health (bypasses Starlink / CGNAT)!"
+            : $"Configured {origin}. It may take a few seconds for Tailscale Funnel to provision its Let's Encrypt certificate on first use.");
+
+        return new DomainSetupResultDto(
+            true,
+            domain,
+            origin,
+            lastPublicIp,
+            localIp,
+            port,
+            false,
+            true,
+            reachable,
+            $"Tailscale Funnel public domain {origin} is active! Guests can now join boards from anywhere without Tailscale.",
+            steps);
     }
 
     public async Task<DomainSetupResultDto> ConfigureDuckDnsAsync(
         string? rawDomain,
         string? apiToken,
         bool forceRenewCert,
-        CancellationToken cancel)
+        CancellationToken cancel,
+        string? targetIpOverride = null)
     {
         var steps = new List<string>();
         var localIp = ServerAddress.PrimaryAddress().ToString();
@@ -93,16 +145,25 @@ public sealed class DomainManager(
         if (string.IsNullOrWhiteSpace(token))
             return Fail("Provide your DuckDNS token from https://www.duckdns.org.");
 
-        var publicIp = await desec.DetectPublicIpv4Async(cancel);
-        if (string.IsNullOrWhiteSpace(publicIp))
-            return Fail("Could not detect this server's public IPv4 address.");
-        lastPublicIp = publicIp;
-        steps.Add($"Detected public IPv4 address: {publicIp}");
+        string? targetIp;
+        if (!string.IsNullOrWhiteSpace(targetIpOverride) && IPAddress.TryParse(targetIpOverride.Trim(), out var parsedOverride))
+        {
+            targetIp = parsedOverride.ToString();
+            steps.Add($"Using selected target IPv4 address: {targetIp}");
+        }
+        else
+        {
+            targetIp = await desec.DetectPublicIpv4Async(cancel);
+            if (string.IsNullOrWhiteSpace(targetIp))
+                return Fail("Could not detect this server's public IPv4 address.");
+            lastPublicIp = targetIp;
+            steps.Add($"Detected public IPv4 address: {targetIp}");
+        }
 
-        var (ddnsOk, ddnsErr) = await duckdns.UpdateAddressRecordAsync(token, domain, publicIp, cancel);
+        var (ddnsOk, ddnsErr) = await duckdns.UpdateAddressRecordAsync(token, domain, targetIp, cancel);
         if (!ddnsOk)
             return Fail(ddnsErr ?? $"Could not update DuckDNS IP for '{domain}'.");
-        steps.Add($"Updated DuckDNS A record: {domain} → {publicIp}");
+        steps.Add($"Updated DuckDNS A record: {domain} → {targetIp}");
 
         var certIssued = false;
         if (forceRenewCert || serverCert.NeedsTrustedRenewal(domain, RenewBeforeExpiry))
@@ -129,20 +190,21 @@ public sealed class DomainManager(
             steps.Add($"Using existing valid SSL certificate for {domain} (expires {serverCert.TrustedExpires:yyyy-MM-dd}).");
         }
 
-        await admin.SetDomainConfig(domain, "duckdns", token, cancel);
+        address.SetCustomPublicDomain(domain, "duckdns");
+        await admin.SetDomainConfig(domain, !string.IsNullOrWhiteSpace(targetIpOverride) ? "duckdns-static" : "duckdns", token, cancel);
         var origin = port == 443 ? $"https://{domain}" : $"https://{domain}:{port}";
         await PrependActiveNetworkAsync(origin, cancel);
 
         var reachable = await ProbeExternalReachabilityAsync(origin, cancel);
         steps.Add(reachable
-            ? $"Verified external HTTPS connectivity to {origin}/health!"
-            : $"Domain & SSL certificate are ready, but {origin} is not reachable from the internet yet (forward TCP port {port} → {localIp}:{port} on your router).");
+            ? $"Verified HTTPS connectivity to {origin}/health!"
+            : $"Domain & SSL certificate are ready, but {origin} is not reachable from the internet yet (forward TCP port {port} → {localIp}:{port} on your router, or use Tailscale Funnel if on Starlink/CGNAT).");
 
         return new DomainSetupResultDto(
             true,
             domain,
             origin,
-            publicIp,
+            targetIp,
             localIp,
             port,
             false,
@@ -328,6 +390,7 @@ public sealed class DomainManager(
     {
         var oldDomain = await admin.DomainName(cancel) ?? address.Certificate?.TrustedDomain;
         address.Certificate?.ClearTrustedDomainCertificate();
+        address.SetCustomPublicDomain(null, null);
         await admin.SetDomainConfig("", "", "", cancel);
 
         if (!string.IsNullOrWhiteSpace(oldDomain))
@@ -375,6 +438,18 @@ public sealed class DomainManager(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        try
+        {
+            var savedDomain = await admin.DomainName(stoppingToken);
+            var savedProvider = await admin.DomainProvider(stoppingToken);
+            if (!string.IsNullOrWhiteSpace(savedDomain))
+                address.SetCustomPublicDomain(savedDomain, savedProvider);
+        }
+        catch
+        {
+            // Ignore startup restore failure.
+        }
+
         // Delay slightly after startup before first background DDNS/certificate check.
         try
         {

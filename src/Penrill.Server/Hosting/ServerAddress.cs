@@ -20,6 +20,9 @@ public sealed record NetworkEndpoint(string Label, string Kind, string Origin, b
 
 public sealed class ServerAddress(AddressMode mode, string localOrigin, int port, ServerCertificate? certificate) : IPublicAddress
 {
+    private volatile string? customPublicDomain;
+    private volatile string? customPublicProvider;
+
     public AddressMode Mode => mode;
 
     public int Port => port;
@@ -30,31 +33,80 @@ public sealed class ServerAddress(AddressMode mode, string localOrigin, int port
 
     public string? ShortPin => certificate?.ShortPin;
 
+    public void SetCustomPublicDomain(string? domain, string? provider)
+    {
+        customPublicDomain = string.IsNullOrWhiteSpace(domain) ? null : domain.Trim().TrimEnd('.').ToLowerInvariant();
+        customPublicProvider = string.IsNullOrWhiteSpace(provider) ? null : provider.Trim().ToLowerInvariant();
+    }
+
+    public bool IsTrustedHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return false;
+        var clean = host.Trim().Split(':')[0].Trim('[', ']').TrimEnd('.');
+        if (certificate is not null && certificate.IsTrustedHost(clean))
+            return true;
+        if (customPublicProvider == "tailscale-funnel" &&
+            !string.IsNullOrWhiteSpace(customPublicDomain) &&
+            string.Equals(clean, customPublicDomain, StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    public bool IsTrustedOrigin(string? origin) =>
+        !string.IsNullOrWhiteSpace(origin) &&
+        Uri.TryCreate(origin, UriKind.Absolute, out var uri) &&
+        IsTrustedHost(uri.Host);
+
     public string? PinFor(string? origin) =>
-        certificate is not null && certificate.IsTrustedOrigin(origin) ? null : Pin;
+        IsTrustedOrigin(origin) ? null : Pin;
 
     public string? PinFor(HttpRequest request) =>
-        certificate is not null && certificate.IsTrustedHost(request.Host.Host) ? null : Pin;
+        IsTrustedHost(EffectiveHost(request)) ? null : Pin;
 
     public string? ShortPinFor(HttpRequest request) =>
-        certificate is not null && certificate.IsTrustedHost(request.Host.Host) ? null : ShortPin;
+        IsTrustedHost(EffectiveHost(request)) ? null : ShortPin;
 
-    public string? PublicDomainOrigin =>
-        mode == AddressMode.Lan && certificate?.TrustedDomain is { Length: > 0 } domain
-            ? (port == 443 ? $"https://{domain}" : $"https://{domain}:{port}")
-            : null;
+    public string? PublicDomainOrigin
+    {
+        get
+        {
+            if (mode != AddressMode.Lan) return null;
+            if (customPublicProvider == "tailscale-funnel" && !string.IsNullOrWhiteSpace(customPublicDomain))
+                return $"https://{customPublicDomain}";
+            var domain = certificate?.TrustedDomain ?? customPublicDomain;
+            if (!string.IsNullOrWhiteSpace(domain))
+                return port == 443 ? $"https://{domain}" : $"https://{domain}:{port}";
+            return null;
+        }
+    }
 
     /// <summary>The origin to print when there is no request to go by: the public domain if configured, otherwise the primary LAN address.</summary>
     public string DefaultOrigin => PublicDomainOrigin ?? (mode == AddressMode.Lan ? $"https://{Bracket(PrimaryAddress())}:{port}" : localOrigin);
 
-    /// <summary>Whatever name the visitor used to get here works for them, except loopback, which only works on this machine.</summary>
+    /// <summary>Whatever name the visitor used to get here works for them, including X-Forwarded-Host from a local tunnel/proxy such as Tailscale Funnel.</summary>
     public string Origin(HttpRequest request)
     {
         if (mode == AddressMode.Local) return $"{request.Scheme}://{request.Host}";
-        var host = request.Host.Host;
-        return host is "localhost" || IPAddress.TryParse(host.Trim('[', ']'), out var ip) && IPAddress.IsLoopback(ip)
+        var effectiveHost = EffectiveHost(request);
+        var hostOnly = effectiveHost.Split(':')[0].Trim('[', ']');
+        return hostOnly is "localhost" || IPAddress.TryParse(hostOnly, out var ip) && IPAddress.IsLoopback(ip)
             ? DefaultOrigin
-            : $"https://{request.Host}";
+            : $"https://{effectiveHost}";
+    }
+
+    private static string EffectiveHost(HttpRequest request)
+    {
+        var remoteIp = request.HttpContext.Connection.RemoteIpAddress;
+        var hostOnly = request.Host.Host.Trim('[', ']');
+        var isLocalProxy = (remoteIp is not null && IPAddress.IsLoopback(remoteIp)) ||
+                           hostOnly is "localhost" ||
+                           (IPAddress.TryParse(hostOnly, out var hostIp) && IPAddress.IsLoopback(hostIp));
+        if (isLocalProxy && request.Headers.TryGetValue("X-Forwarded-Host", out var fwd) && ! string.IsNullOrWhiteSpace(fwd))
+        {
+            var first = fwd.ToString().Split(',')[0].Trim();
+            if (first.Length > 0) return first;
+        }
+        return request.Host.Value ?? "";
     }
 
     public void RefreshCertificate(IEnumerable<string> origins) => certificate?.UpdateExtraOrigins(origins);
