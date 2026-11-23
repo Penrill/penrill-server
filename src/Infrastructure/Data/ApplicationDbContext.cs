@@ -28,6 +28,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IApplica
 
     public DbSet<BoardLink> BoardLinks => Set<BoardLink>();
 
+    public DbSet<RemovedBoard> RemovedBoards => Set<RemovedBoard>();
+
     public DbSet<Folder> Folders => Set<Folder>();
 
     public DbSet<FolderMember> FolderMembers => Set<FolderMember>();

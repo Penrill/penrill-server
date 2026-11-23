@@ -12,6 +12,9 @@ public abstract class RequestException(string? reason, string message) : Excepti
 /// <summary>The request is malformed (400).</summary>
 public sealed class BadRequestException(string? reason = null) : RequestException(reason, "The request is not valid.");
 
+/// <summary>What was asked for does not exist, with a reason such as <c>removed</c> (404).</summary>
+public sealed class MissingException(string? reason = null) : RequestException(reason, "The specified resource was not found.");
+
 /// <summary>The request clashes with what exists, such as a taken name (409).</summary>
 public sealed class ConflictException(string? reason = null) : RequestException(reason, "The request conflicts with the current state.");
 

@@ -6,6 +6,7 @@ using Penrill.Application.Sharing.Commands.DisableDrawLink;
 using Penrill.Application.Sharing.Commands.EnableDrawLink;
 using Penrill.Application.Sharing.Commands.JoinBoard;
 using Penrill.Application.Sharing.Commands.RemoveBoardPerson;
+using Penrill.Application.Sharing.Commands.SetBoardCopying;
 using Penrill.Application.Sharing.Commands.ShareBoard;
 using Penrill.Application.Sharing.Queries.GetBoardPeople;
 using Penrill.Application.Sharing.Queries.GetCommunity;
@@ -22,6 +23,8 @@ public class Sharing : IEndpointGroup
 
     public sealed record JoinBody(string? Token, string? Name);
 
+    public sealed record CopyingBody(bool? Allowed);
+
     public static void Map(RouteGroupBuilder groupBuilder)
     {
         groupBuilder.RequireAuthorization();
@@ -35,6 +38,7 @@ public class Sharing : IEndpointGroup
         groupBuilder.MapGet(GetDrawLink, "/boards/{id}/link");
         groupBuilder.MapPost(EnableDrawLink, "/boards/{id}/link");
         groupBuilder.MapDelete(DisableDrawLink, "/boards/{id}/link");
+        groupBuilder.MapPut(SetBoardCopying, "/boards/{id}/copying");
         groupBuilder.MapPost(Join, "/join").AllowAnonymous().RequireRateLimiting(RateLimits.Account);
     }
 
@@ -70,6 +74,13 @@ public class Sharing : IEndpointGroup
     public static async Task<NoContent> AddBoardPerson(ISender sender, string id, FolderChange input)
     {
         await sender.Send(new AddBoardPersonCommand(id, input.Name));
+        return TypedResults.NoContent();
+    }
+
+    [EndpointSummary("Let the people a board is shared with copy and export it, or stop them")]
+    public static async Task<NoContent> SetBoardCopying(ISender sender, string id, CopyingBody input)
+    {
+        await sender.Send(new SetBoardCopyingCommand(id, input.Allowed));
         return TypedResults.NoContent();
     }
 

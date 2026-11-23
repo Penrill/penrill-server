@@ -25,4 +25,7 @@ public class Board : BaseEntity
     public DateTimeOffset Created { get; set; }
 
     public DateTimeOffset Updated { get; set; }
+
+    /// <summary>Whether people the owner shares the board with may duplicate, export or copy it out.</summary>
+    public bool Copying { get; set; }
 }

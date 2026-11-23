@@ -40,17 +40,17 @@ Names are 3 to 32 of `a-z 0-9 _ -` (sign-in lowercases them); passwords are 10 t
 
 | Route | Answer |
 |---|---|
-| `GET /api/boards` | `[{id, title, seq, updated, owner}]`, the boards the user can open, newest first |
+| `GET /api/boards` | `[{id, title, seq, updated, owner, copying, shared}]`, the boards the user can open, newest first. `copying`: the people the owner shares it with may duplicate, export or copy it out (the owner always may). `shared`: for the owner, someone else can open it |
 | `PUT /api/boards/{id}` `{title, background, items}` | 201 `{seq: 0, created: true}`; 200 `{seq, created: false}` when it exists and the user can open it; 409 when it is someone else's; 403 for guests; 415 unless JSON |
 | `GET /api/boards/{id}` | `{id, seq, title, background, items}` |
 | `GET /api/boards/{id}/changes?after=N` | `{seq, changes: [{seq, author, change}]}`; 410 when the changes are no longer kept |
 | `POST /api/boards/{id}/changes` `{id, ops}` | `{seq}`, also for a change sent again; 400 `{reason}` when refused; 503 when it could not be stored |
-| `DELETE /api/boards/{id}` | 204; only the owner (403), 404 when missing |
+| `DELETE /api/boards/{id}?copies=keep\|remove` | 204; only the owner (403), 404 when missing. `copies=remove` takes it off the devices of the people it was shared with; by default they keep it |
 | `PUT /api/boards/{id}/assets/{hash}` | 204; image types only (415) |
 | `GET /api/boards/{id}/assets/{hash}` | the image, cached privately for a year |
 | `GET /api/boards/{id}/live` | WebSocket, see [PROTOCOL.md](PROTOCOL.md) |
 
-Opening a board someone else owns, or one the user cannot open, answers 403; a board that does not exist, 404.
+Opening a board someone else owns, or one the user cannot open, answers 403; a board that does not exist, 404, with `reason: removed` when its owner deleted it with `copies=remove`.
 
 ## Sharing
 
@@ -66,6 +66,7 @@ Opening a board someone else owns, or one the user cannot open, answers 403; a b
 | `GET /api/boards/{id}/link` | `{token}`, null while the draw link is off; owner only |
 | `POST /api/boards/{id}/link` | `{token}`; the same token while it stays on |
 | `DELETE /api/boards/{id}/link` | 204; guests who came in by it lose the board and are disconnected |
+| `PUT /api/boards/{id}/copying` `{allowed}` | 204; whether the people it is shared with may duplicate, export and copy it out. Off for new boards; owner only (403) |
 | `POST /api/join` `{token, name}` | `{name, token, board}`; a new guest account, or `token: null` when the caller is already signed in |
 
 Guests (accounts made by a draw link) cannot create boards, folders, shares or templates: 403.

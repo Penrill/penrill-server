@@ -12,4 +12,10 @@ public sealed record BoardSummaryDto
     public DateTimeOffset Updated { get; init; }
 
     public string Owner { get; init; } = "";
+
+    /// <summary>Whether the people the owner shares the board with may duplicate, export or copy it out.</summary>
+    public bool Copying { get; init; }
+
+    /// <summary>For its owner: whether anyone else can open the board (people, a draw link or a folder).</summary>
+    public bool Shared { get; init; }
 }

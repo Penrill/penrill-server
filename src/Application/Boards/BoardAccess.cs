@@ -11,6 +11,9 @@ public enum BoardAccess { Missing, Denied, Allowed }
 /// </summary>
 public static class BoardAccessExtensions
 {
+    /// <summary>The reason of a 404 for a board its owner deleted and took off everyone's devices.</summary>
+    public const string BoardRemoved = "removed";
+
     public static IQueryable<Board> VisibleTo(this IQueryable<Board> boards, IApplicationDbContext context, string user) =>
         boards.Where(b => b.Owner == user
             || context.BoardPeople.Any(p => p.BoardId == b.Id && p.UserId == user)
@@ -28,7 +31,9 @@ public static class BoardAccessExtensions
     {
         switch (await context.AccessAsync(user, board, cancellationToken))
         {
-            case BoardAccess.Missing: throw new NotFoundException(board, nameof(Board));
+            case BoardAccess.Missing:
+                if (await context.RemovedBoards.AnyAsync(b => b.Id == board, cancellationToken)) throw new MissingException(BoardRemoved);
+                throw new NotFoundException(board, nameof(Board));
             case BoardAccess.Denied: throw new ForbiddenAccessException();
         }
     }
