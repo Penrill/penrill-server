@@ -36,6 +36,8 @@ public partial class CreateBoardCommandHandler(
                 Id = request.Id, Owner = owner, Title = content.Title, Background = content.Background,
                 Snapshot = content.SerializeItems(), Created = now, Updated = now
             });
+            // The id is in use again: whoever still finds it now finds a board they may or may not open.
+            await context.RemovedBoards.Where(b => b.Id == request.Id).ExecuteDeleteAsync(cancellationToken);
             try
             {
                 await context.SaveChangesAsync(cancellationToken);

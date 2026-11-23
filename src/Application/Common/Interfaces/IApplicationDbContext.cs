@@ -15,6 +15,8 @@ public interface IApplicationDbContext
 
     DbSet<BoardLink> BoardLinks { get; }
 
+    DbSet<RemovedBoard> RemovedBoards { get; }
+
     DbSet<Folder> Folders { get; }
 
     DbSet<FolderMember> FolderMembers { get; }

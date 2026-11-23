@@ -33,6 +33,7 @@ public class ProblemDetailsExceptionHandler : IExceptionHandler
     private static int StatusOf(RequestException exception) => exception switch
     {
         BadRequestException => StatusCodes.Status400BadRequest,
+        MissingException => StatusCodes.Status404NotFound,
         ConflictException => StatusCodes.Status409Conflict,
         GoneException => StatusCodes.Status410Gone,
         PayloadTooLargeException => StatusCodes.Status413PayloadTooLarge,

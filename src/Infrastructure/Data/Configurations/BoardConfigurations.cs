@@ -19,6 +19,15 @@ public class BoardConfiguration : IEntityTypeConfiguration<Board>
     }
 }
 
+public class RemovedBoardConfiguration : IEntityTypeConfiguration<RemovedBoard>
+{
+    public void Configure(EntityTypeBuilder<RemovedBoard> builder)
+    {
+        builder.HasKey(b => b.Id);
+        builder.Property(b => b.Id).HasMaxLength(64);
+    }
+}
+
 public class BoardChangeConfiguration : IEntityTypeConfiguration<BoardChange>
 {
     public void Configure(EntityTypeBuilder<BoardChange> builder)

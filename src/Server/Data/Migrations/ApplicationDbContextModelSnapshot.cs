@@ -155,6 +155,9 @@ namespace Penrill.Server.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("Copying")
+                        .HasColumnType("INTEGER");
+
                     b.Property<long>("Created")
                         .HasColumnType("INTEGER");
 
@@ -413,6 +416,20 @@ namespace Penrill.Server.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Grants");
+                });
+
+            modelBuilder.Entity("Penrill.Domain.Entities.RemovedBoard", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("At")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RemovedBoards");
                 });
 
             modelBuilder.Entity("Penrill.Domain.Entities.Setting", b =>

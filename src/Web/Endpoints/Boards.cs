@@ -66,10 +66,11 @@ public class Boards : IEndpointGroup
     }
 
     [EndpointSummary("Delete a board")]
-    [EndpointDescription("Only its owner can. Everyone on it is disconnected.")]
-    public static async Task<NoContent> DeleteBoard(ISender sender, string id, CancellationToken cancellationToken)
+    [EndpointDescription("Only its owner can. Everyone on it is disconnected. With copies=remove the people it was shared with lose their copies too.")]
+    public static async Task<NoContent> DeleteBoard(ISender sender, string id, string? copies, CancellationToken cancellationToken)
     {
-        await sender.Send(new DeleteBoardCommand(id), cancellationToken);
+        if (copies is not (null or "keep" or "remove")) throw new BadRequestException();
+        await sender.Send(new DeleteBoardCommand(id, copies == "remove"), cancellationToken);
         return TypedResults.NoContent();
     }
 
