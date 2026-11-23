@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Penrill.Application.Accounts;
@@ -21,6 +22,7 @@ public sealed partial class LiveSessions(
     IServiceScopeFactory scopes, RoomRegistry rooms, LiveConnections live, TimeProvider time, ILogger<LiveSessions> logger)
 {
     private static readonly TimeSpan HelloTimeout = TimeSpan.FromSeconds(5);
+    private const int MaxQueuedSubmits = 64;
 
     public async Task RunAsync(WebSocket webSocket, string boardId)
     {
@@ -105,40 +107,73 @@ public sealed partial class LiveSessions(
 
     private async Task<LiveCloseReason> Receive(LiveSocket socket, BoardRoom room)
     {
-        while (await socket.Receive(BoardLimits.MaxChangeBytes + 1024) is { } message)
+        // Submits wait for the store; signals (cursors, ink in flight) must not wait behind them, so submits go to a
+        // queue of their own and are applied in order. A full queue stops reading, as a busy store always did.
+        var submits = Channel.CreateBounded<JsonObject>(new BoundedChannelOptions(MaxQueuedSubmits) { SingleReader = true, SingleWriter = true });
+        var applying = Apply(socket, room, submits.Reader);
+        try
         {
-            switch (Text(message, "type"))
+            while (await socket.Receive(BoardLimits.MaxChangeBytes + 1024) is { } message)
             {
-                case "submit":
-                    var node = message["change"];
-                    if (!ChangeCodec.TryParse(node, out var change))
-                    {
-                        ChangeRejected(logger, ChangeCodec.IdOf(node), room.BoardId, socket.User);
-                        if (ChangeCodec.IdOf(node) is not { } changeId) return LiveCloseReason.Protocol;
-                        socket.TrySend(RoomFrames.Reject(changeId, ChangeCodec.Invalid));
+                switch (Text(message, "type"))
+                {
+                    case "submit":
+                        await submits.Writer.WriteAsync(message, socket.Stopping);
                         break;
-                    }
-                    var result = await room.Submit(change, JsonSerializer.SerializeToUtf8Bytes(node), socket.User, socket.Stopping);
-                    switch (result.Status)
-                    {
-                        case SubmitStatus.Duplicate: socket.TrySend(RoomFrames.Ack(change.Id, result.Seq)); break;
-                        case SubmitStatus.Rejected: socket.TrySend(RoomFrames.Reject(change.Id, result.Reason!)); break;
-                        case SubmitStatus.Failed: return LiveCloseReason.ServerError;
-                    }
-                    break;
-                case "signal":
-                    if (message["data"] is not JsonObject data) return LiveCloseReason.Protocol;
-                    var bytes = JsonSerializer.SerializeToUtf8Bytes(data);
-                    if (bytes.Length <= BoardLimits.MaxSignalBytes) room.Signal(socket, bytes);
-                    break;
-                case "ping":
-                    socket.TrySend(RoomFrames.Pong);
-                    break;
-                default:
-                    return LiveCloseReason.Protocol;
+                    case "signal":
+                        if (message["data"] is not JsonObject data) return LiveCloseReason.Protocol;
+                        var bytes = JsonSerializer.SerializeToUtf8Bytes(data);
+                        if (bytes.Length <= BoardLimits.MaxSignalBytes) room.Signal(socket, bytes);
+                        break;
+                    case "ping":
+                        socket.TrySend(RoomFrames.Pong);
+                        break;
+                    default:
+                        return LiveCloseReason.Protocol;
+                }
             }
         }
+        finally
+        {
+            submits.Writer.TryComplete();
+            await applying;
+        }
         return socket.Reason;
+    }
+
+    /// <summary>Applies one socket's submits in the order they came; closes the socket on a broken message or store.</summary>
+    private async Task Apply(LiveSocket socket, BoardRoom room, ChannelReader<JsonObject> submits)
+    {
+        try
+        {
+            await foreach (var message in submits.ReadAllAsync(socket.Stopping))
+            {
+                var node = message["change"];
+                if (!ChangeCodec.TryParse(node, out var change))
+                {
+                    ChangeRejected(logger, ChangeCodec.IdOf(node), room.BoardId, socket.User);
+                    if (ChangeCodec.IdOf(node) is not { } changeId)
+                    {
+                        socket.Close(LiveCloseReason.Protocol);
+                        return;
+                    }
+                    socket.TrySend(RoomFrames.Reject(changeId, ChangeCodec.Invalid));
+                    continue;
+                }
+                var result = await room.Submit(change, JsonSerializer.SerializeToUtf8Bytes(node), socket.User, socket.Stopping);
+                switch (result.Status)
+                {
+                    case SubmitStatus.Duplicate: socket.TrySend(RoomFrames.Ack(change.Id, result.Seq)); break;
+                    case SubmitStatus.Rejected: socket.TrySend(RoomFrames.Reject(change.Id, result.Reason!)); break;
+                    case SubmitStatus.Failed:
+                        socket.Close(LiveCloseReason.ServerError);
+                        return;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 
     /// <summary>Counts and logs a change that does not parse, over HTTP or live.</summary>
