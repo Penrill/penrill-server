@@ -40,7 +40,7 @@ Names are 3 to 32 of `a-z 0-9 _ -` (sign-in lowercases them); passwords are 10 t
 
 | Route | Answer |
 |---|---|
-| `GET /api/boards` | `[{id, title, seq, updated, owner, copying, shared}]`, the boards the user can open, newest first. `copying`: the user may duplicate, export or copy the board out (always for the owner). `shared`: for the owner, someone else can open it |
+| `GET /api/boards` | `[{id, title, seq, updated, owner, copying, shared}]`, the boards the user can open, newest first. `copying`: the people the owner shares it with may duplicate, export or copy it out (the owner always may). `shared`: for the owner, someone else can open it |
 | `PUT /api/boards/{id}` `{title, background, items}` | 201 `{seq: 0, created: true}`; 200 `{seq, created: false}` when it exists and the user can open it; 409 when it is someone else's; 403 for guests; 415 unless JSON |
 | `GET /api/boards/{id}` | `{id, seq, title, background, items}` |
 | `GET /api/boards/{id}/changes?after=N` | `{seq, changes: [{seq, author, change}]}`; 410 when the changes are no longer kept |

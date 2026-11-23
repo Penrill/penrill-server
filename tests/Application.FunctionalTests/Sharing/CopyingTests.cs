@@ -44,7 +44,7 @@ public class CopyingTests
     public async Task OnlyTheOwnerDecidesWhetherOthersMayCopy()
     {
         var (ann, bob) = await SharedBoard();
-        ((bool)(await Row(ann))["copying"]!).ShouldBeTrue();
+        ((bool)(await Row(ann))["copying"]!).ShouldBeFalse();
         ((bool)(await Row(ann))["shared"]!).ShouldBeTrue();
         ((bool)(await Row(bob))["copying"]!).ShouldBeFalse();
         ((bool)(await Row(bob))["shared"]!).ShouldBeFalse();
@@ -52,6 +52,7 @@ public class CopyingTests
         (await bob.PutAsJsonAsync($"/api/boards/{Board}/copying", new { allowed = true })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         (await ann.PutAsJsonAsync($"/api/boards/{Board}/copying", new { allowed = true })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         ((bool)(await Row(bob))["copying"]!).ShouldBeTrue();
+        ((bool)(await Row(ann))["copying"]!).ShouldBeTrue();
         (await ann.PutAsJsonAsync($"/api/boards/{Board}/copying", new { })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 

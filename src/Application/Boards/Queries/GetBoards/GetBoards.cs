@@ -16,7 +16,7 @@ public class GetBoardsQueryHandler(IApplicationDbContext context, IUser user) : 
             .Select(b => new BoardSummaryDto
             {
                 Id = b.Id, Title = b.Title, Seq = b.Seq, Updated = b.Updated, Owner = b.Owner ?? "",
-                Copying = b.Owner == me || b.Copying,
+                Copying = b.Copying,
                 Shared = b.Owner == me && (context.BoardPeople.Any(p => p.BoardId == b.Id)
                     || context.BoardLinks.Any(l => l.BoardId == b.Id)
                     || context.FolderBoards.Any(f => f.BoardId == b.Id))
