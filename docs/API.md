@@ -7,11 +7,11 @@ What Penrill editors (desktop, web and the cloud workspace) call. Every host ser
 
 - JSON in camelCase. Times are ISO 8601 strings, except template versions (`updated`), which are Unix milliseconds.
 - Signed-in requests send `Authorization: Bearer <token>`: 64 hex characters from `/api/login`, `/api/register`,
-  `/api/link/poll` or `/api/join`. Without a valid one a protected route answers 401.
+  `/api/invites/{token}`, `/api/link/poll` or `/api/join`. Without a valid one a protected route answers 401.
 - Board ids are 32 or 64 lower-case hex characters; image hashes are the lower-case hex SHA-256 of the bytes.
 - Errors are RFC 9110 problem details. When the refusal has a reason editors act on, it is in `reason`:
   `invalid` (a change that does not parse), `hash-mismatch` (image bytes and hash differ), `board-full` (over 200,000 items).
-- Sign-in, registration, link start and join allow 20 requests a minute per address; link polls 240. Over that: 429.
+- Sign-in, registration, invite checks and redemption, link start and join allow 20 requests a minute per address; link polls 240. Over that: 429.
 - Limits: a board 32 MiB, a change 8 MiB, an image 25 MiB, all images on a board 256 MiB together (413 beyond).
 
 ## Accounts
@@ -22,6 +22,11 @@ What Penrill editors (desktop, web and the cloud workspace) call. Every host ser
 | `POST /api/register` `{name, password}` | no | `{name, token}`; 403 when registration is closed, 409 when the name is taken, 400 when invalid |
 | `POST /api/login` `{name, password}` | no | `{name, token}`; 401 when refused |
 | `POST /api/logout` | yes | 204; this credential's live connections close |
+| `GET /api/invites` | admin/owner | `[{id, role, usesLeft, expires, createdBy, created}]`, open invites newest first; 403 for members |
+| `POST /api/invites` `{role?, uses?, days?}` | admin/owner | `{id, token, url, role, usesLeft, expires, createdBy}`; defaults to `member`, 1 use, 7 days; 403 for members |
+| `DELETE /api/invites/{id}` | admin/owner | 204; 404 when missing, 403 for members |
+| `GET /api/invites/{token}` | no | 204 when the invite is active; 404 when unknown, expired or used |
+| `POST /api/invites/{token}` `{name, password}` | no | `{name, token}`; creates an account and signs in even when registration is closed; 404 when expired or used, 409 when taken, 400 when invalid |
 
 Names are 3 to 32 of `a-z 0-9 _ -` (sign-in lowercases them); passwords are 10 to 256 characters.
 

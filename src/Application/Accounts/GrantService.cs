@@ -79,7 +79,7 @@ public sealed partial class GrantService(
     }
 
     public async Task<bool> Delete(string id, CancellationToken cancellationToken) =>
-        await context.Grants.Where(g => g.Id == id).ExecuteDeleteAsync(cancellationToken) == 1;
+        await context.Grants.Where(g => g.Id == id && g.Kind == GrantKind.Invite).ExecuteDeleteAsync(cancellationToken) == 1;
 
     private async Task<GrantToken> Create(GrantKind kind, string subject, string by, TimeSpan? lifetime, int uses, CancellationToken cancellationToken)
     {

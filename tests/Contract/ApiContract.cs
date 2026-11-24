@@ -8,9 +8,11 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
+using Penrill.Application.Accounts;
 using Penrill.Application.Common.Interfaces;
 using Penrill.Domain.Constants;
 using Penrill.Domain.Entities;
+using Penrill.Domain.Enums;
 using Shouldly;
 
 namespace Penrill.Contract.Tests;
@@ -535,5 +537,81 @@ public abstract class ApiContract<TProgram> where TProgram : class
         ((bool)listed["current"]!).ShouldBeTrue();
         (await browser.PostAsync($"/api/devices/{listed["id"]}/revoke", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await device.GetAsync("/api/boards")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    [Test]
+    public async Task InvitesCreateManageAndRedeemAccounts()
+    {
+        var anonymous = Factory.CreateClient();
+        (await anonymous.GetAsync("/api/invites")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        (await anonymous.PostAsJsonAsync("/api/invites", new { })).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        (await anonymous.DeleteAsync("/api/invites/missing")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+        (await anonymous.GetAsync("/api/invites/not-a-valid-token")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        var (ann, _) = await SignUp("ann");
+        (await ann.GetAsync("/api/invites")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await ann.PostAsJsonAsync("/api/invites", new { })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await ann.DeleteAsync("/api/invites/missing")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        string adminInviteToken;
+        using (var scope = Factory.Services.CreateScope())
+        {
+            var grants = scope.ServiceProvider.GetRequiredService<GrantService>();
+            adminInviteToken = (await grants.CreateInvite("system", Role.Admin, null, 1, default)).Token;
+        }
+
+        (await anonymous.GetAsync($"/api/invites/{adminInviteToken}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await anonymous.PostAsJsonAsync($"/api/invites/{adminInviteToken}", new { name = "x", password = Password })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await anonymous.PostAsJsonAsync($"/api/invites/{adminInviteToken}", new { name = "ann", password = Password })).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+
+        var acceptedAdmin = await anonymous.PostAsJsonAsync($"/api/invites/{adminInviteToken}", new { name = "boss", password = Password });
+        acceptedAdmin.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var adminSession = (await acceptedAdmin.Content.ReadFromJsonAsync<JsonObject>())!;
+        ((string)adminSession["name"]!).ShouldBe("boss");
+        var adminToken = (string)adminSession["token"]!;
+        adminToken.Length.ShouldBe(64);
+        (await anonymous.GetAsync($"/api/invites/{adminInviteToken}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await anonymous.PostAsJsonAsync($"/api/invites/{adminInviteToken}", new { name = "cid", password = Password })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+        var admin = Factory.CreateClient();
+        admin.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", adminToken);
+
+        (await admin.PostAsJsonAsync("/api/invites", new { role = "owner" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await admin.PostAsJsonAsync("/api/invites", new { uses = 0 })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await admin.PostAsJsonAsync("/api/invites", new { days = 91 })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+
+        var createdResponse = await admin.PostAsJsonAsync("/api/invites", new { role = "member", uses = 2, days = 7 });
+        createdResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var created = (await createdResponse.Content.ReadFromJsonAsync<JsonObject>())!;
+        var inviteId = (string)created["id"]!;
+        var inviteToken = (string)created["token"]!;
+        inviteToken.Length.ShouldBe(64);
+        ((string)created["url"]!).ShouldEndWith("/invite/" + inviteToken);
+        ((string)created["role"]!).ShouldBe("member");
+        ((int)created["usesLeft"]!).ShouldBe(2);
+        ((string)created["createdBy"]!).ShouldBe("boss");
+        created["expires"].ShouldNotBeNull();
+
+        var listed = (await admin.GetFromJsonAsync<JsonArray>("/api/invites"))!.ShouldHaveSingleItem()!.AsObject();
+        ((string)listed["id"]!).ShouldBe(inviteId);
+        ((string)listed["role"]!).ShouldBe("member");
+        ((int)listed["usesLeft"]!).ShouldBe(2);
+        ((string)listed["createdBy"]!).ShouldBe("boss");
+        listed.ContainsKey("token").ShouldBeFalse();
+
+        var bobResponse = await anonymous.PostAsJsonAsync($"/api/invites/{inviteToken}", new { name = "bob", password = Password });
+        bobResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var bobToken = (string)(await bobResponse.Content.ReadFromJsonAsync<JsonObject>())!["token"]!;
+        var bob = Factory.CreateClient();
+        bob.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bobToken);
+        (await bob.GetAsync("/api/boards")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var remaining = (await admin.GetFromJsonAsync<JsonArray>("/api/invites"))!.ShouldHaveSingleItem()!.AsObject();
+        ((int)remaining["usesLeft"]!).ShouldBe(1);
+
+        (await admin.DeleteAsync($"/api/invites/{inviteId}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await admin.DeleteAsync($"/api/invites/{inviteId}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await anonymous.GetAsync($"/api/invites/{inviteToken}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await admin.GetFromJsonAsync<JsonArray>("/api/invites"))!.ShouldBeEmpty();
     }
 }

@@ -70,6 +70,33 @@ public class AccessTests
     }
 
     [Test]
+    public async Task InvitesWorkThroughTheApiWhenRegistrationIsClosed()
+    {
+        var ownerName = await Owner();
+        var (owner, _) = await SignIn(ownerName);
+
+        var createdResponse = await owner.PostAsJsonAsync("/api/invites", new { });
+        createdResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var created = (await createdResponse.Content.ReadFromJsonAsync<JsonObject>())!;
+        var token = (string)created["token"]!;
+        ((string)created["url"]!).ShouldEndWith("/invite/" + token);
+        ((string)created["role"]!).ShouldBe("member");
+        ((int)created["usesLeft"]!).ShouldBe(1);
+
+        var anonymous = _factory.CreateClient();
+        (await anonymous.GetAsync($"/api/invites/{token}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        var joined = await anonymous.PostAsJsonAsync($"/api/invites/{token}", new { name = "bob", password = Password });
+        joined.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var bobToken = (string)(await joined.Content.ReadFromJsonAsync<JsonObject>())!["token"]!;
+        (await As(bobToken).GetAsync("/api/boards")).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        // Deleting an invite cannot touch a password reset grant.
+        var reset = (await Grants(g => g.CreateReset(ownerName, "bob", default)))!;
+        (await owner.DeleteAsync($"/api/invites/{reset.Grant.Id}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await Grants(g => g.Peek(reset.Token, default))).ShouldNotBeNull();
+    }
+
+    [Test]
     public async Task OnlyOneClaimMakesAnOwner()
     {
         var claim = await Grants(g => g.CreateClaim(default));
