@@ -200,7 +200,7 @@ public class AccessTests
         await Admin(async a => { await a.Backup(zip, default); return 0; });
         zip.Position = 0;
         using var archive = new System.IO.Compression.ZipArchive(zip);
-        archive.Entries.Select(e => e.FullName).ShouldContain(name => name is "penrill.dump" or "penrill.json");
+        archive.Entries.Select(e => e.FullName).ShouldContain(name => name == "penrill.dump" || name == "penrill.json");
     }
 
     [Test]

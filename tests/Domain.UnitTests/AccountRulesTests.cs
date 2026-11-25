@@ -1,4 +1,5 @@
 using Domain.Constants;
+using Sync.Protocol;
 
 namespace Domain.UnitTests;
 
