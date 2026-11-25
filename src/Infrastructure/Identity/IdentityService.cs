@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Models;
-using Penrill.Domain.Enums;
+using Application.Common.Interfaces;
+using Application.Common.Models;
+using Domain.Enums;
 
-namespace Penrill.Infrastructure.Identity;
+namespace Infrastructure.Identity;
 
 public class IdentityService(
     UserManager<ApplicationUser> userManager,

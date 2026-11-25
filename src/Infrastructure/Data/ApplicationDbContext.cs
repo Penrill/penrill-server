@@ -1,23 +1,13 @@
-using System.Reflection;
+using Application.Common.Interfaces;
+using Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Infrastructure.Identity;
 
-namespace Penrill.Infrastructure.Data;
+namespace Infrastructure.Data;
 
-/// <summary>
-/// The Penrill model, the same for every host. The database provider and the assembly holding its migrations come
-/// from the host: SQLite for a self-hosted server, PostgreSQL for Penrill Cloud. A host that keeps data of its own
-/// (Penrill Cloud's audit log, for one) derives from this context and adds its sets.
-/// </summary>
-public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IApplicationDbContext
+/// <summary>The Penrill Server model on PostgreSQL.</summary>
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+    : IdentityDbContext<ApplicationUser>(options), IApplicationDbContext
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
-
-    /// <summary>For contexts that derive from this one.</summary>
-    protected ApplicationDbContext(DbContextOptions options) : base(options) { }
-
     public DbSet<Board> Boards => Set<Board>();
 
     public DbSet<BoardChange> BoardChanges => Set<BoardChange>();
@@ -48,14 +38,5 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>, IApplica
     {
         base.OnModelCreating(builder);
         builder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
-    }
-
-    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
-    {
-        base.ConfigureConventions(configurationBuilder);
-        // SQLite has no date type: stored as text, DateTimeOffset values cannot be compared or ordered in SQL.
-        // As UTC ticks they can.
-        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
-            configurationBuilder.Properties<DateTimeOffset>().HaveConversion<DateTimeOffsetToBinaryConverter>();
     }
 }

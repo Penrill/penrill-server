@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR-009](ADR-009-Thin-Sync-Core-Postgres-And-Controllers.md)
 
 ## Date
 

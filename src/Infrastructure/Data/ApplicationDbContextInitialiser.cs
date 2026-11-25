@@ -2,13 +2,12 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Penrill.Domain.Enums;
 
-namespace Penrill.Infrastructure.Data;
+namespace Infrastructure.Data;
 
 public static class InitialiserExtensions
 {
-    /// <summary>Brings the database up to the latest migration and makes sure the roles exist.</summary>
+    /// <summary>Brings the database up to date and makes sure the roles exist.</summary>
     public static async Task InitialiseDatabaseAsync(this IHost app)
     {
         using var scope = app.Services.CreateScope();
@@ -32,7 +31,10 @@ public partial class ApplicationDbContextInitialiser(
     {
         try
         {
-            await context.Database.MigrateAsync();
+            if (context.Database.GetMigrations().Any())
+                await context.Database.MigrateAsync();
+            else
+                await context.Database.EnsureCreatedAsync();
         }
         catch (Exception ex)
         {

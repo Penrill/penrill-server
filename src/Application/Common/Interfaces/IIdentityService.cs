@@ -1,6 +1,6 @@
-using Penrill.Application.Common.Models;
+using Application.Common.Models;
 
-namespace Penrill.Application.Common.Interfaces;
+namespace Application.Common.Interfaces;
 
 /// <summary>
 /// Accounts and their passwords and roles. The user name is the account id: boards, folders and

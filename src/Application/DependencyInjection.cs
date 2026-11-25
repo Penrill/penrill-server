@@ -1,22 +1,19 @@
 using System.Reflection;
+using Application.Accounts;
+using Application.Admin;
+using Application.Common.Behaviours;
+using Application.Common.Models;
+using Application.Linking;
+using Application.Live;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Penrill.Application.Accounts;
-using Penrill.Application.Admin;
-using Penrill.Application.Common.Behaviours;
-using Penrill.Application.Common.Models;
-using Penrill.Application.Linking;
-using Penrill.Application.Live;
+using Sync;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
-public static class DependencyInjection
+public static class ApplicationDependencyInjection
 {
-    /// <summary>
-    /// The shared use cases and services. A host that adds use cases of its own passes their assembly in
-    /// <paramref name="extraAssemblies"/>, so their handlers and validators join the same pipeline.
-    /// </summary>
     public static void AddApplicationServices(this IHostApplicationBuilder builder, params Assembly[] extraAssemblies)
     {
         Assembly[] assemblies = [Assembly.GetExecutingAssembly(), .. extraAssemblies];
@@ -37,15 +34,11 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(new AccountOptions { OpenRegistration = builder.Configuration.GetValue("PENRILL_OPEN_REGISTRATION", false) });
         services.TryAddSingleton(new LinkOptions());
-        services.TryAddSingleton(new RoomOptions());
         services.AddScoped<AccountService>();
         services.AddScoped<GrantService>();
         services.AddScoped<AdminService>();
         services.AddSingleton<LinkService>();
-        services.AddSingleton<BoardLog>();
-        services.AddSingleton<RoomRegistry>();
-        services.AddSingleton<LiveConnections>();
-        services.AddSingleton<LiveSessions>();
-        services.AddHostedService<RoomJanitor>();
+        services.AddBoardSync();
+        services.AddHostedService<ExpiredSessionCleaner>();
     }
 }

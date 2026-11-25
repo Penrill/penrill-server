@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>A one-time link (see <see cref="GrantKind"/>). Only the SHA-256 of its token is stored.</summary>
 public class Grant

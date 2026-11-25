@@ -1,6 +1,6 @@
-using Penrill.Application.Common.Security;
+using Application.Common.Security;
 
-namespace Penrill.Application.Accounts.Commands.DeleteInvite;
+namespace Application.Accounts.Commands.DeleteInvite;
 
 /// <summary>Revokes an open invite link before it expires or runs out of uses.</summary>
 [Authorize(Roles = $"{nameof(Role.Admin)},{nameof(Role.Owner)}")]

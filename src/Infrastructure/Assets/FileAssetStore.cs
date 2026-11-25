@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Domain.Constants;
+using Application.Common.Interfaces;
+using Domain.Constants;
 
-namespace Penrill.Infrastructure.Assets;
+namespace Infrastructure.Assets;
 
 public sealed class FileAssetOptions
 {
@@ -44,5 +44,5 @@ public sealed class FileAssetStore(FileAssetOptions options) : IAssetStore
     }
 
     private string PathOf(string hash) =>
-        BoardLimits.IsAssetHash(hash) ? Path.Combine(_root, hash[..2], hash) : throw new ArgumentException("Not an asset hash.", nameof(hash));
+        ProtocolConstants.IsAssetHash(hash) ? Path.Combine(_root, hash[..2], hash) : throw new ArgumentException("Not an asset hash.", nameof(hash));
 }

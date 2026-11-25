@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Models;
-using Penrill.Application.Common.Telemetry;
+using Application.Common.Interfaces;
+using Application.Common.Models;
+using Sync.Live;
 
-namespace Penrill.Application.Accounts;
+namespace Application.Accounts;
 
 public sealed record SignedIn(string Name, string Token);
 
@@ -40,7 +40,7 @@ public sealed partial class AccountService(
     {
         if (AccountRules.NormalizeUserName(name) is not { } user || !AccountRules.IsPassword(password)) return null;
         if (await identity.CheckPasswordAsync(user, password!) is { } id) return id;
-        PenrillTelemetry.AuthFailures.Add(1, PenrillTelemetry.Tag("kind", "password"));
+        SyncTelemetry.AuthFailures.Add(1, SyncTelemetry.Tag("kind", "password"));
         LogSignInFailed(logger, user);
         return null;
     }

@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
-using Penrill.Application.Boards;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Sharing.Queries.GetDrawLink;
+using Application.Boards;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Application.Sharing.Queries.GetDrawLink;
 
-namespace Penrill.Application.Sharing.Commands.EnableDrawLink;
+namespace Application.Sharing.Commands.EnableDrawLink;
 
 /// <summary>Turns the board's draw link on; while it is on, asking again returns the same token.</summary>
 [Authorize]

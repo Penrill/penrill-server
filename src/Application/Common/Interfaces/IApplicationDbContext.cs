@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
-namespace Penrill.Application.Common.Interfaces;
+namespace Application.Common.Interfaces;
 
 /// <summary>The data the use cases work with (ADR-001). Accounts themselves live behind <see cref="IIdentityService"/>.</summary>
 public interface IApplicationDbContext

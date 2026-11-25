@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Penrill.Domain.Constants;
-using Penrill.Infrastructure.Identity;
+using Domain.Constants;
+using Infrastructure.Identity;
 
-namespace Penrill.Infrastructure.Data.Configurations;
+namespace Infrastructure.Data.Configurations;
 
 public class CredentialConfiguration : IEntityTypeConfiguration<Credential>
 {

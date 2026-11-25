@@ -1,8 +1,8 @@
 using MediatR;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Penrill.Domain.Common;
+using Domain.Common;
 
-namespace Penrill.Infrastructure.Data.Interceptors;
+namespace Infrastructure.Data.Interceptors;
 
 /// <summary>
 /// Publishes the domain events of saved entities once the save succeeded, so handlers see the new state

@@ -1,4 +1,4 @@
-namespace Penrill.Web.Infrastructure;
+namespace Web.Infrastructure;
 
 /// <summary>Per-address rate limit policies.</summary>
 public static class RateLimits

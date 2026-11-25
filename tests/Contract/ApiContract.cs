@@ -6,26 +6,21 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.Extensions.DependencyInjection;
 using NUnit.Framework;
-using Penrill.Application.Accounts;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Domain.Constants;
-using Penrill.Domain.Entities;
-using Penrill.Domain.Enums;
 using Shouldly;
 
-namespace Penrill.Contract.Tests;
+namespace ContractTests;
 
 /// <summary>
 /// What editors rely on in <c>/api</c>: routes, JSON shapes, status codes, <c>reason</c> words and the live protocol
 /// with its close codes. A host derives from this with a factory that has open registration and an empty store per
-/// test; the tests themselves must pass unchanged on every host.
+/// test; the tests themselves must pass unchanged on every host without coupling to persistence or application types.
 /// </summary>
 public abstract class ApiContract<TProgram> where TProgram : class
 {
     protected const string Board = "00112233445566778899aabbccddeeff";
     protected const string Password = "correct horse battery";
+    protected virtual long BoardAssetQuotaBytes => 256L * 1024 * 1024;
 
     private WebApplicationFactory<TProgram>? _factory;
 
@@ -33,6 +28,12 @@ public abstract class ApiContract<TProgram> where TProgram : class
 
     /// <summary>A host with <c>PENRILL_OPEN_REGISTRATION=true</c> and no data.</summary>
     protected abstract Task<WebApplicationFactory<TProgram>> CreateFactoryAsync();
+
+    /// <summary>Records <paramref name="bytes"/> of existing image storage on <paramref name="boardId"/> for the board quota test.</summary>
+    protected abstract Task SeedBoardAssetBytesAsync(string boardId, long bytes);
+
+    /// <summary>Creates a single-use administrator invite token directly in the host store for the invite contract test.</summary>
+    protected abstract Task<string> CreateAdminInviteTokenAsync();
 
     /// <summary>Clears what <see cref="CreateFactoryAsync"/> made, after the factory is disposed.</summary>
     protected virtual Task CleanUpAsync() => Task.CompletedTask;
@@ -451,12 +452,7 @@ public abstract class ApiContract<TProgram> where TProgram : class
     {
         var (ann, _) = await SignUp("ann");
         await CreateBoard(ann);
-        using (var scope = Factory.Services.CreateScope())
-        {
-            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-            context.BoardAssets.Add(new BoardAsset { BoardId = Board, Hash = new string('a', 64), ContentType = "image/png", Size = BoardLimits.MaxBoardAssetBytes });
-            await context.SaveChangesAsync(default);
-        }
+        await SeedBoardAssetBytesAsync(Board, BoardAssetQuotaBytes);
         var png = new byte[] { 0x89, 0x50, 0x4e, 0x47, 1, 2, 3 };
         var hash = Convert.ToHexStringLower(SHA256.HashData(png));
         var content = new ByteArrayContent(png);
@@ -553,12 +549,7 @@ public abstract class ApiContract<TProgram> where TProgram : class
         (await ann.PostAsJsonAsync("/api/invites", new { })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         (await ann.DeleteAsync("/api/invites/missing")).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
 
-        string adminInviteToken;
-        using (var scope = Factory.Services.CreateScope())
-        {
-            var grants = scope.ServiceProvider.GetRequiredService<GrantService>();
-            adminInviteToken = (await grants.CreateInvite("system", Role.Admin, null, 1, default)).Token;
-        }
+        var adminInviteToken = await CreateAdminInviteTokenAsync();
 
         (await anonymous.GetAsync($"/api/invites/{adminInviteToken}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await anonymous.PostAsJsonAsync($"/api/invites/{adminInviteToken}", new { name = "x", password = Password })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);

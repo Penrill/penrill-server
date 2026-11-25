@@ -1,9 +1,9 @@
 using System.Security.Cryptography;
-using Penrill.Application.Accounts;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
+using Application.Accounts;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
 
-namespace Penrill.Application.Sharing.Commands.JoinBoard;
+namespace Application.Sharing.Commands.JoinBoard;
 
 /// <summary>
 /// Opens a board by its draw link. Someone without an account here gets a guest account that works on that board only,

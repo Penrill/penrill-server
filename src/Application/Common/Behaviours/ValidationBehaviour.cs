@@ -1,6 +1,6 @@
-﻿using ValidationException = Penrill.Application.Common.Exceptions.ValidationException;
+﻿using ValidationException = Application.Common.Exceptions.ValidationException;
 
-namespace Penrill.Application.Common.Behaviours;
+namespace Application.Common.Behaviours;
 
 public class ValidationBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull

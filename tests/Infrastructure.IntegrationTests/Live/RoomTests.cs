@@ -1,56 +1,96 @@
 using System.Text;
 using System.Text.Json.Nodes;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
+using Application.Common.Interfaces;
+using Domain.Entities;
+using Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Live;
-using Penrill.Domain.Boards;
-using Penrill.Domain.Entities;
-using Penrill.Infrastructure.Data;
+using Npgsql;
+using Respawn;
+using Respawn.Graph;
+using Shared;
+using Sync.Live;
+using Sync.Protocol;
 
-namespace Penrill.Infrastructure.IntegrationTests.Live;
+namespace Infrastructure.IntegrationTests.Live;
 
-/// <summary>Board rooms on a real SQLite database: ordering, duplicates, catching up, snapshots and slow members.</summary>
+/// <summary>Board rooms on a real PostgreSQL database: ordering, duplicates, catching up, snapshots and slow members.</summary>
 public class RoomTests
 {
     private const string Board = "0123456789abcdef0123456789abcdef";
     private string _directory = null!;
+    private string _connectionString = null!;
+    private DistributedApplication? _app;
+    private Respawner _respawner = null!;
     private IHost _host = null!;
+
+    [OneTimeSetUp]
+    public async Task OneTimeSetUp()
+    {
+        if (Environment.GetEnvironmentVariable("PENRILL_TEST_DATABASE") is { Length: > 0 } database)
+        {
+            _connectionString = database;
+        }
+        else
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+            var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.TestAppHost>(
+                args: [], configureBuilder: (options, _) => options.DisableDashboard = true, cts.Token);
+            builder.Configuration["ASPIRE_ALLOW_UNSECURED_TRANSPORT"] = "true";
+            _app = await builder.BuildAsync(cts.Token).WaitAsync(cts.Token);
+            await _app.StartAsync(cts.Token).WaitAsync(cts.Token);
+            await _app.ResourceNotifications.WaitForResourceHealthyAsync(Services.Database, cts.Token);
+            _connectionString = (await _app.GetConnectionStringAsync(Services.Database, cts.Token))!;
+        }
+
+        _directory = Directory.CreateTempSubdirectory("penrill-room-").FullName;
+        var hostBuilder = Host.CreateApplicationBuilder();
+        hostBuilder.Configuration["PENRILL_DATA_DIR"] = _directory;
+        hostBuilder.Configuration[$"ConnectionStrings:{Services.Database}"] = _connectionString;
+        hostBuilder.AddApplicationServices();
+        hostBuilder.AddInfrastructureServices();
+        hostBuilder.Services.AddScoped<IUser, NoUser>();
+        _host = hostBuilder.Build();
+        await _host.InitialiseDatabaseAsync();
+
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync();
+        _respawner = await Respawner.CreateAsync(conn, new RespawnerOptions
+        {
+            DbAdapter = DbAdapter.Postgres,
+            SchemasToInclude = ["public"],
+            TablesToIgnore = [new Table("__EFMigrationsHistory"), new Table("AspNetRoles")]
+        });
+    }
 
     [SetUp]
     public async Task SetUp()
     {
-        _directory = Directory.CreateTempSubdirectory("penrill-room-").FullName;
-        var builder = Host.CreateApplicationBuilder();
-        builder.Configuration["PENRILL_DATA_DIR"] = _directory;
-        builder.AddApplicationServices();
-        var database = Path.Combine(_directory, "penrill.db");
-        builder.AddInfrastructureServices((_, options) =>
-            options.UseSqlite($"Data Source={database}", sqlite => sqlite.MigrationsAssembly("Penrill.Server")));
-        builder.Services.AddScoped<IUser, NoUser>();
-        _host = builder.Build();
-        await _host.InitialiseDatabaseAsync();
+        await using var conn = new NpgsqlConnection(_connectionString);
+        await conn.OpenAsync();
+        await _respawner.ResetAsync(conn);
+
         using var scope = _host.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         context.Boards.Add(new Board { Id = Board, Title = "Board", Background = "dots", Snapshot = """[{"id":"seed","z":1}]"""u8.ToArray() });
         await context.SaveChangesAsync(default);
     }
 
-    [TearDown]
-    public void TearDown()
+    [OneTimeTearDown]
+    public async Task OneTimeTearDown()
     {
-        _host.Dispose();
-        SqliteConnection.ClearAllPools();
-        Directory.Delete(_directory, recursive: true);
+        _host?.Dispose();
+        if (_app is not null) await _app.DisposeAsync();
+        if (Directory.Exists(_directory)) Directory.Delete(_directory, recursive: true);
     }
 
     private RoomRegistry Registry(int snapshotEvery = 500, int recent = 1000) =>
-        new(_host.Services.GetRequiredService<BoardLog>(),
-            new RoomOptions { SnapshotEvery = snapshotEvery, RecentChanges = recent, IdleTimeout = TimeSpan.Zero }, TimeProvider.System, NullLoggerFactory.Instance);
+        new(_host.Services.GetRequiredService<IBoardStore>(),
+            _host.Services.GetRequiredService<IBoardHistorySink>(),
+            _host.Services.GetRequiredService<IRoomBackplane>(),
+            new RoomOptions { SnapshotEvery = snapshotEvery, RecentChanges = recent, IdleTimeout = TimeSpan.Zero },
+            TimeProvider.System, NullLoggerFactory.Instance);
 
     private static (Change Change, byte[] Body) Put(string changeId, string itemId)
     {
@@ -158,7 +198,9 @@ public class RoomTests
     private sealed class RecordingMember : IRoomMember
     {
         public Guid Id { get; } = Guid.NewGuid();
+        public string UserId => "ann";
         public string User => "ann";
+        public BoardPermission Permission => BoardPermission.Edit;
         public int Accepts { get; init; } = int.MaxValue;
         public List<JsonObject> Frames { get; } = [];
         public LiveCloseReason? Closed { get; private set; }

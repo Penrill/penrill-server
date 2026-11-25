@@ -1,10 +1,10 @@
 using System.Security.Cryptography;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Common.Telemetry;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Sync.Live;
 
-namespace Penrill.Application.Boards.Commands.UploadAsset;
+namespace Application.Boards.Commands.UploadAsset;
 
 /// <summary>Stores an image of a board under the SHA-256 of its bytes. Images on one board together stay under the board quota.</summary>
 [Authorize]
@@ -15,7 +15,7 @@ public class UploadAssetCommandValidator : AbstractValidator<UploadAssetCommand>
     public UploadAssetCommandValidator()
     {
         RuleFor(c => c.BoardId).MustBeBoardId();
-        RuleFor(c => c.Hash).Must(BoardLimits.IsAssetHash).WithMessage("Not an asset hash.");
+        RuleFor(c => c.Hash).Must(ProtocolConstants.IsAssetHash).WithMessage("Not an asset hash.");
     }
 }
 
@@ -29,13 +29,13 @@ public class UploadAssetCommandHandler(IApplicationDbContext context, IUser user
         await context.EnsureAccessAsync(user.Id!, request.BoardId, cancellationToken);
         var type = request.ContentType?.ToLowerInvariant();
         if (type is null || !ImageTypes.Contains(type)) throw new UnsupportedMediaTypeException();
-        if (request.Content.Length > BoardLimits.MaxAssetBytes) throw new PayloadTooLargeException();
+        if (request.Content.Length > BoardLimitPolicy.SelfHostedDefault.MaxAssetBytes) throw new PayloadTooLargeException();
         if (Convert.ToHexStringLower(SHA256.HashData(request.Content)) != request.Hash) throw new BadRequestException("hash-mismatch");
         var known = await context.BoardAssets.AnyAsync(a => a.BoardId == request.BoardId && a.Hash == request.Hash, cancellationToken);
         if (!known)
         {
             var used = await context.BoardAssets.Where(a => a.BoardId == request.BoardId).SumAsync(a => a.Size, cancellationToken);
-            if (used + request.Content.Length > BoardLimits.MaxBoardAssetBytes) throw new PayloadTooLargeException();
+            if (used + request.Content.Length > BoardLimitPolicy.SelfHostedDefault.MaxBoardAssetBytes) throw new PayloadTooLargeException();
         }
         if (!await assets.ExistsAsync(request.Hash, cancellationToken)) await assets.SaveAsync(request.Hash, request.Content, cancellationToken);
         if (!known)
@@ -50,6 +50,6 @@ public class UploadAssetCommandHandler(IApplicationDbContext context, IUser user
                 // The same image arrived twice at once; one record is enough.
             }
         }
-        PenrillTelemetry.AssetBytes.Add(request.Content.Length);
+        SyncTelemetry.AssetBytes.Add(request.Content.Length);
     }
 }

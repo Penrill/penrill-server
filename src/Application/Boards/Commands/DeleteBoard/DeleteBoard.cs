@@ -1,9 +1,9 @@
 using Microsoft.Extensions.Logging;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Boards.Commands.DeleteBoard;
+namespace Application.Boards.Commands.DeleteBoard;
 
 /// <summary>
 /// Only the board's owner can delete it; devices still syncing it find it gone. With <paramref name="RemoveCopies"/>

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Penrill.Domain.Common;
+namespace Domain.Common;
 
 /// <summary>
 /// An entity that can raise domain events. Keys differ per entity (board ids are hex strings,

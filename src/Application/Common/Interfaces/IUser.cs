@@ -1,4 +1,4 @@
-namespace Penrill.Application.Common.Interfaces;
+namespace Application.Common.Interfaces;
 
 /// <summary>Who sent the current request.</summary>
 public interface IUser

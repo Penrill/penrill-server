@@ -1,8 +1,8 @@
-using Penrill.Application.Boards;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Boards;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Queries.GetBoardPeople;
+namespace Application.Sharing.Queries.GetBoardPeople;
 
 /// <summary>Who the owner let onto the board, by name. Not found for anyone but the owner.</summary>
 [Authorize]

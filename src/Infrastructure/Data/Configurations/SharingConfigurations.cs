@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Penrill.Domain.Constants;
-using Penrill.Infrastructure.Identity;
+using Domain.Constants;
+using Infrastructure.Identity;
 
-namespace Penrill.Infrastructure.Data.Configurations;
+namespace Infrastructure.Data.Configurations;
 
 public class FolderConfiguration : IEntityTypeConfiguration<Folder>
 {
@@ -10,7 +10,7 @@ public class FolderConfiguration : IEntityTypeConfiguration<Folder>
     {
         builder.HasKey(f => f.Id);
         builder.Property(f => f.Id).HasMaxLength(32);
-        builder.Property(f => f.Name).HasMaxLength(BoardLimits.MaxLabel);
+        builder.Property(f => f.Name).HasMaxLength(ProtocolConstants.MaxLabel);
         builder.Property(f => f.Owner).HasMaxLength(256);
     }
 }
@@ -45,7 +45,7 @@ public class TemplateConfiguration : IEntityTypeConfiguration<Template>
         builder.Property(t => t.Id).HasMaxLength(32);
         builder.Property(t => t.Folder).HasMaxLength(32);
         builder.Property(t => t.Author).HasMaxLength(256);
-        builder.Property(t => t.Name).HasMaxLength(BoardLimits.MaxLabel);
+        builder.Property(t => t.Name).HasMaxLength(ProtocolConstants.MaxLabel);
         builder.HasIndex(t => t.Folder);
     }
 }

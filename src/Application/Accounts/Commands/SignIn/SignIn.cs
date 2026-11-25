@@ -1,4 +1,4 @@
-namespace Penrill.Application.Accounts.Commands.SignIn;
+namespace Application.Accounts.Commands.SignIn;
 
 /// <summary>Signs in with a name and password and returns a session token that lasts 30 days.</summary>
 public record SignInCommand(string? Name, string? Password) : IRequest<SignedIn>;

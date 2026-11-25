@@ -1,12 +1,12 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Live;
-using Penrill.Domain.Boards;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Sync.Live;
+using Sync.Protocol;
 
-namespace Penrill.Application.Boards.Commands.CreateBoard;
+namespace Application.Boards.Commands.CreateBoard;
 
 /// <summary>Uploads a board made on a device. Sending it again is safe: the board that already exists answers with its sequence.</summary>
 [Authorize]

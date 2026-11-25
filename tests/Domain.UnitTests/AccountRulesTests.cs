@@ -1,6 +1,7 @@
-using Penrill.Domain.Constants;
+using Domain.Constants;
+using Sync.Protocol;
 
-namespace Penrill.Domain.UnitTests;
+namespace Domain.UnitTests;
 
 public class AccountRulesTests
 {
@@ -20,8 +21,8 @@ public class AccountRulesTests
     [Test]
     public void BoardIdsAreLowerCaseHex()
     {
-        BoardLimits.IsBoardId("00112233445566778899aabbccddeeff").ShouldBeTrue();
-        BoardLimits.IsBoardId("00112233445566778899AABBCCDDEEFF").ShouldBeFalse();
-        BoardLimits.IsBoardId("0011").ShouldBeFalse();
+        ProtocolConstants.IsBoardId("00112233445566778899aabbccddeeff").ShouldBeTrue();
+        ProtocolConstants.IsBoardId("00112233445566778899AABBCCDDEEFF").ShouldBeFalse();
+        ProtocolConstants.IsBoardId("0011").ShouldBeFalse();
     }
 }

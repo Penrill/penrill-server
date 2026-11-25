@@ -1,10 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <RootNamespace>Penrill.Application</RootNamespace>
-    <AssemblyName>Penrill.Application</AssemblyName>
-    <IsPackable>true</IsPackable>
-    <Description>Penrill use cases: accounts, device linking, boards and their live rooms, sharing and templates. Shared by Penrill Server and Penrill Cloud.</Description>
+    <RootNamespace>Application</RootNamespace>
+    <AssemblyName>Application</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,11 +16,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.csproj" />
+    <ProjectReference Include="..\Sync\Sync.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="Penrill.Application.UnitTests" />
-    <InternalsVisibleTo Include="Penrill.Infrastructure.IntegrationTests" />
+    <InternalsVisibleTo Include="Application.UnitTests" />
+    <InternalsVisibleTo Include="Infrastructure.IntegrationTests" />
   </ItemGroup>
 
 </Project>

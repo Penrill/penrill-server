@@ -1,4 +1,4 @@
-namespace Penrill.Application.Boards.Queries.GetBoards;
+namespace Application.Boards.Queries.GetBoards;
 
 /// <summary>A board the user can open. <c>Owner</c> is who made it; empty once that account is gone.</summary>
 public sealed record BoardSummaryDto

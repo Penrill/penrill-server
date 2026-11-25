@@ -1,9 +1,9 @@
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Live;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Sync.Live;
 
-namespace Penrill.Application.Boards.Queries.GetBoardChanges;
+namespace Application.Boards.Queries.GetBoardChanges;
 
 /// <summary>
 /// The changes after <see cref="After"/> as JSON <c>{seq, changes}</c>. Gone when the board no longer keeps them:

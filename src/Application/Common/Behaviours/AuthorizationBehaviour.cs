@@ -1,9 +1,9 @@
 ﻿using System.Reflection;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Common.Behaviours;
+namespace Application.Common.Behaviours;
 
 public class AuthorizationBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> 
     where TRequest : notnull

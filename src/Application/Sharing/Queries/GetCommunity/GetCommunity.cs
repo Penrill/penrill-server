@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Queries.GetCommunity;
+namespace Application.Sharing.Queries.GetCommunity;
 
 /// <summary>The user's folders, who is in them, the boards shared into them and the templates the user can add.</summary>
 [Authorize]

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 
-namespace Penrill.Infrastructure.Identity;
+namespace Infrastructure.Identity;
 
 /// <summary>
 /// A Penrill account. Its <see cref="IdentityUser.Id"/> is its user name: boards, folders and templates refer to

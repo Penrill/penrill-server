@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>Someone the owner let onto a board by name, or a guest who came in by its draw link.</summary>
 public class BoardPerson

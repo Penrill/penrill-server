@@ -1,9 +1,9 @@
-﻿using Penrill.Application.Common.Exceptions;
+﻿using Application.Common.Exceptions;
 using FluentValidation.Results;
 using NUnit.Framework;
 using Shouldly;
 
-namespace Penrill.Application.UnitTests.Common.Exceptions;
+namespace Application.UnitTests.Common.Exceptions;
 
 public class ValidationExceptionTests
 {

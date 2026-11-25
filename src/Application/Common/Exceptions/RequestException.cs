@@ -1,4 +1,4 @@
-namespace Penrill.Application.Common.Exceptions;
+namespace Application.Common.Exceptions;
 
 /// <summary>
 /// A request the use case refuses for a reason the client can act on. <see cref="Reason"/>, when set,

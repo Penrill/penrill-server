@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Penrill.Domain.Constants;
+namespace Domain.Constants;
 
 public static partial class AccountRules
 {

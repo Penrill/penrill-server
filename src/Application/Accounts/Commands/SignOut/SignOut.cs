@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Accounts.Commands.SignOut;
+namespace Application.Accounts.Commands.SignOut;
 
 /// <summary>Ends the credential the request was signed with; its live connections close.</summary>
 [Authorize]

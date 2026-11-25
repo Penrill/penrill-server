@@ -1,8 +1,8 @@
-using Penrill.Application.Boards;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Boards;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Commands.AddBoardPerson;
+namespace Application.Sharing.Commands.AddBoardPerson;
 
 /// <summary>The owner lets someone onto the board by name. Not found when the board isn't theirs or nobody has that name.</summary>
 [Authorize]
@@ -13,7 +13,7 @@ public class AddBoardPersonCommandValidator : AbstractValidator<AddBoardPersonCo
     public AddBoardPersonCommandValidator()
     {
         RuleFor(c => c.Board).MustBeBoardId();
-        RuleFor(c => c.Name).Must(BoardLimits.IsLabel);
+        RuleFor(c => c.Name).Must(ProtocolConstants.IsLabel);
     }
 }
 

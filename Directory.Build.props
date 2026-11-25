@@ -4,22 +4,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.6.0</Version>
+    <Version>0.7.0</Version>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
-
-  <!-- Packages Penrill Cloud builds on: Domain, Application, Infrastructure, Web and the contract tests. -->
-  <PropertyGroup Condition="'$(IsPackable)' == 'true'">
-    <Authors>Penrill</Authors>
-    <Company>Penrill</Company>
-    <PackageProjectUrl>https://github.com/Penrill/penrill-server</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Penrill/penrill-server</RepositoryUrl>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
-  </PropertyGroup>
-
-  <ItemGroup Condition="'$(IsPackable)' == 'true'">
-    <None Include="$(MSBuildThisFileDirectory)LICENSE" Pack="true" PackagePath="" Visible="false" />
-  </ItemGroup>
 </Project>

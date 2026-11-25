@@ -1,6 +1,6 @@
-using Penrill.Application.Common.Exceptions;
+using Application.Common.Exceptions;
 
-namespace Penrill.Application.Linking.Commands.StartLink;
+namespace Application.Linking.Commands.StartLink;
 
 /// <summary>An editor asks to be linked to an account; someone signed in approves it by the short code.</summary>
 public record StartLinkCommand(string? Device, string? App, string Address) : IRequest<LinkStartDto>;

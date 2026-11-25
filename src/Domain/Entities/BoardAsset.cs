@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>An image a board uses. The bytes live in the asset store under <see cref="Hash"/>, shared by every board that has them.</summary>
 public class BoardAsset

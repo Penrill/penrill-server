@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Linking.Commands.AnswerLink;
+namespace Application.Linking.Commands.AnswerLink;
 
 /// <summary>The signed-in person allows or denies the device waiting under the code.</summary>
 [Authorize]

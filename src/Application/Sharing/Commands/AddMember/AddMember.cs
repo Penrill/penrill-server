@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Commands.AddMember;
+namespace Application.Sharing.Commands.AddMember;
 
 /// <summary>The folder's owner adds someone by name. Not found when the folder isn't theirs or nobody has that name.</summary>
 [Authorize(Policy = Policies.NoGuests)]
@@ -12,7 +12,7 @@ public class AddMemberCommandValidator : AbstractValidator<AddMemberCommand>
     public AddMemberCommandValidator()
     {
         RuleFor(c => c.Folder).NotEmpty();
-        RuleFor(c => c.Name).Must(BoardLimits.IsLabel);
+        RuleFor(c => c.Name).Must(ProtocolConstants.IsLabel);
     }
 }
 

@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging;
-using ValidationException = Penrill.Application.Common.Exceptions.ValidationException;
-using Penrill.Application.Common.Exceptions;
+using ValidationException = Application.Common.Exceptions.ValidationException;
+using Application.Common.Exceptions;
 
-namespace Penrill.Application.Common.Behaviours;
+namespace Application.Common.Behaviours;
 
 /// <summary>Logs failures that are not one of the expected refusals (validation, access, conflicts and the like).</summary>
 public partial class UnhandledExceptionBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>

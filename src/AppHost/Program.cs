@@ -1,10 +1,16 @@
-using Penrill.Shared;
+using Shared;
 
-// Local development: `aspire run` starts the server with open registration and a data folder under the app,
-// and opens the Aspire dashboard with its logs, traces and metrics.
+// Local development: `aspire run` starts PostgreSQL in a container and Penrill Server against it,
+// with open registration and the Aspire dashboard for logs, traces and metrics.
 var builder = DistributedApplication.CreateBuilder(args);
 
-builder.AddProject<Projects.Penrill_Server>(Services.WebApi)
+var database = builder.AddPostgres(Services.DatabaseServer)
+    .WithDataVolume()
+    .AddDatabase(Services.Database);
+
+builder.AddProject<Projects.Web>(Services.WebApi)
+    .WithReference(database)
+    .WaitFor(database)
     .WithEnvironment("PENRILL_OPEN_REGISTRATION", "true")
     .WithExternalHttpEndpoints()
     .WithAspNetCoreEnvironment()

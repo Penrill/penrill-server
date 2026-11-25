@@ -5,13 +5,13 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
-using Penrill.Application.Accounts;
-using Penrill.Application.Admin;
-using Penrill.Application.Linking;
-using Penrill.Domain.Enums;
-using Penrill.Server.Hosting;
+using Application.Accounts;
+using Application.Admin;
+using Application.Linking;
+using Domain.Enums;
+using Web.Hosting;
 
-namespace Penrill.Application.FunctionalTests.Accounts;
+namespace Application.FunctionalTests.Accounts;
 
 /// <summary>Claiming a server, invites, password resets, device linking and revoking devices on a self-hosted server.</summary>
 public class AccessTests
@@ -20,7 +20,11 @@ public class AccessTests
     private ServerFactory _factory = null!;
 
     [SetUp]
-    public void SetUp() => _factory = new ServerFactory();
+    public async Task SetUp()
+    {
+        await FunctionalTestSetup.DbResetter.ResetAsync();
+        _factory = new ServerFactory();
+    }
 
     [TearDown]
     public async Task TearDown() => await _factory.DisposeAsync();
@@ -196,7 +200,7 @@ public class AccessTests
         await Admin(async a => { await a.Backup(zip, default); return 0; });
         zip.Position = 0;
         using var archive = new System.IO.Compression.ZipArchive(zip);
-        archive.Entries.Select(e => e.FullName).ShouldContain("penrill.db");
+        archive.Entries.Select(e => e.FullName).ShouldContain(name => name == "penrill.dump" || name == "penrill.json");
     }
 
     [Test]

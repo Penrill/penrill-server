@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Logging;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Models;
+using Application.Common.Interfaces;
+using Application.Common.Models;
 
-namespace Penrill.Application.Accounts;
+namespace Application.Accounts;
 
 public sealed record GrantToken(string Token, Grant Grant);
 

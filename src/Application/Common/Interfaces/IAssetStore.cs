@@ -1,4 +1,4 @@
-namespace Penrill.Application.Common.Interfaces;
+namespace Application.Common.Interfaces;
 
 /// <summary>Image bytes by their SHA-256, shared by every board that uses them. A file folder on a server, blob storage in the cloud.</summary>
 public interface IAssetStore

@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Penrill.Application.Common.Interfaces;
+using Application.Common.Interfaces;
 
-namespace Penrill.Application.Common.Behaviours;
+namespace Application.Common.Behaviours;
 
 /// <summary>Warns about requests slower than half a second. Long polls and live sessions do not pass through here.</summary>
 public partial class PerformanceBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>

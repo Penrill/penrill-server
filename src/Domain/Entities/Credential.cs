@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>
 /// A bearer token an editor signs in with. Only the SHA-256 of the token is stored.

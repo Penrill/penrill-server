@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Models;
+using Application.Common.Exceptions;
+using Application.Common.Models;
 
-namespace Penrill.Application.Accounts.Commands.Register;
+namespace Application.Accounts.Commands.Register;
 
 /// <summary>Creates an account and signs it in, when the host has open registration.</summary>
 public record RegisterCommand(string? Name, string? Password) : IRequest<SignedIn>;

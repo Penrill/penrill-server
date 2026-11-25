@@ -1,10 +1,10 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Sharing.Queries.GetCommunity;
-using Penrill.Application.Templates.Commands.PublishTemplate;
-using Penrill.Domain.Boards;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Application.Sharing.Queries.GetCommunity;
+using Application.Templates.Commands.PublishTemplate;
+using Sync.Protocol;
 
-namespace Penrill.Application.Templates.Commands.UpdateTemplate;
+namespace Application.Templates.Commands.UpdateTemplate;
 
 /// <summary>The author edits a shared template in place: everyone who added it gets the new version.</summary>
 [Authorize(Policy = Policies.NoGuests)]
@@ -14,7 +14,7 @@ public class UpdateTemplateCommandValidator : AbstractValidator<UpdateTemplateCo
 {
     public UpdateTemplateCommandValidator()
     {
-        RuleFor(c => c.Name).Must(BoardLimits.IsLabel);
+        RuleFor(c => c.Name).Must(ProtocolConstants.IsLabel);
         RuleFor(c => c.Data).Must(data => TemplateFile.IsBoard(data)).WithMessage("Not a board file.");
     }
 }

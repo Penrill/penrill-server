@@ -1,8 +1,8 @@
-using Penrill.Application.Boards;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Boards;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Commands.DisableDrawLink;
+namespace Application.Sharing.Commands.DisableDrawLink;
 
 /// <summary>Turns the draw link off and takes everyone who came in through it off the board, disconnecting them.</summary>
 [Authorize]

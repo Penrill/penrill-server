@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Templates.Commands.DeleteTemplate;
+namespace Application.Templates.Commands.DeleteTemplate;
 
 /// <summary>Stops sharing a template: its author may, and so may an admin. Copies people added keep their last version.</summary>
 [Authorize]

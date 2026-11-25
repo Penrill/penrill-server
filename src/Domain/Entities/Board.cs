@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>
 /// A board: its latest metadata, the sequence number of its last change and a snapshot of its items at

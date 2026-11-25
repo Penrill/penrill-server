@@ -21,7 +21,7 @@ for arch in $arches; do
     install -d "$pkg/DEBIAN" "$pkg/usr/lib/penrill-server" "$pkg/usr/lib/systemd/system" "$pkg/usr/share/doc/penrill-server" \
         "$pkg/usr/bin" "$pkg/etc/avahi/services"
     # Invariant globalization drops the libicu dependency, whose package name differs between every Debian and Ubuntu release.
-    dotnet publish "$repo/src/Server" -c Release -r "$rid" --self-contained true \
+    dotnet publish "$repo/src/Web" -c Release -r "$rid" --self-contained true \
         -p:DebugType=None -p:InvariantGlobalization=true -p:Version="$version" -o "$pkg/usr/lib/penrill-server"
     ln -s ../lib/penrill-server/Penrill.Server "$pkg/usr/bin/penrill-server"
     install -m 644 "$repo/LICENSE" "$pkg/usr/share/doc/penrill-server/copyright"
@@ -35,7 +35,7 @@ Version: $version
 Architecture: $arch
 Maintainer: Yaroslav Yushchenko <contact@yaroslavyushchenko.com>
 Depends: libc6 (>= 2.31), libgcc-s1, libstdc++6, libssl3 | libssl3t64, zlib1g, systemd
-Recommends: avahi-daemon
+Recommends: avahi-daemon, postgresql
 Section: net
 Priority: optional
 Homepage: https://penrill.com

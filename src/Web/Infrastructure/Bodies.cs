@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Penrill.Application.Common.Exceptions;
+using Application.Common.Exceptions;
 
-namespace Penrill.Web.Infrastructure;
+namespace Web.Infrastructure;
 
 /// <summary>Request bodies with a size limit, read before anything is stored.</summary>
 public static class Bodies

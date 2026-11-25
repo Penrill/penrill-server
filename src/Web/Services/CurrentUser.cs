@@ -1,8 +1,8 @@
 using System.Security.Claims;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Web.Infrastructure;
+using Application.Common.Interfaces;
+using Web.Infrastructure;
 
-namespace Penrill.Web.Services;
+namespace Web.Services;
 
 public class CurrentUser(IHttpContextAccessor httpContextAccessor) : IUser
 {
