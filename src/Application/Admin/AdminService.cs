@@ -1,8 +1,8 @@
-using Penrill.Application.Accounts;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Models;
+using Application.Accounts;
+using Application.Common.Interfaces;
+using Application.Common.Models;
 
-namespace Penrill.Application.Admin;
+namespace Application.Admin;
 
 public sealed record OrphanBoard(string Id, string Title, DateTimeOffset Updated);
 

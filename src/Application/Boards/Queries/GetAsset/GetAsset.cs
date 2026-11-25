@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Boards.Queries.GetAsset;
+namespace Application.Boards.Queries.GetAsset;
 
 [Authorize]
 public record GetAssetQuery(string BoardId, string Hash) : IRequest<AssetContent>;
@@ -19,7 +19,7 @@ public class GetAssetQueryHandler(IApplicationDbContext context, IUser user, IAs
     public async Task<AssetContent> Handle(GetAssetQuery request, CancellationToken cancellationToken)
     {
         await context.EnsureAccessAsync(user.Id!, request.BoardId, cancellationToken);
-        var info = BoardLimits.IsAssetHash(request.Hash)
+        var info = ProtocolConstants.IsAssetHash(request.Hash)
             ? await context.BoardAssets.AsNoTracking().FirstOrDefaultAsync(a => a.BoardId == request.BoardId && a.Hash == request.Hash, cancellationToken)
             : null;
         Guard.Against.NotFound(request.Hash, info);

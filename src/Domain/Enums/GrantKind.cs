@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Enums;
+namespace Domain.Enums;
 
 /// <summary>
 /// A one-time link that lets someone do one thing without an account or without their password:

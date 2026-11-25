@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>
 /// A board file shared as a template with everyone (<see cref="Folder"/> empty) or with one folder.

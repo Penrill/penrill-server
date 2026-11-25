@@ -1,8 +1,8 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Live;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Sync.Live;
 
-namespace Penrill.Application.Boards.Queries.GetBoardSnapshot;
+namespace Application.Boards.Queries.GetBoardSnapshot;
 
 /// <summary>The whole board as JSON: <c>{id, seq, title, background, items}</c>.</summary>
 [Authorize]

@@ -4,10 +4,10 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Penrill.Application.Accounts;
-using Penrill.Application.Common.Telemetry;
+using Application.Accounts;
+using Sync.Live;
 
-namespace Penrill.Web.Infrastructure;
+namespace Web.Infrastructure;
 
 /// <summary>Signs a request in by its <c>Authorization: Bearer &lt;token&gt;</c> header (a session or a device token).</summary>
 public sealed class BearerSessionHandler(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory loggers, UrlEncoder encoder)
@@ -24,7 +24,7 @@ public sealed class BearerSessionHandler(IOptionsMonitor<AuthenticationSchemeOpt
         var session = await accounts.Authenticate(header["Bearer ".Length..].Trim(), Context.RequestAborted);
         if (session is null)
         {
-            PenrillTelemetry.AuthFailures.Add(1, PenrillTelemetry.Tag("kind", "token"));
+            SyncTelemetry.AuthFailures.Add(1, SyncTelemetry.Tag("kind", "token"));
             return AuthenticateResult.Fail("The session is unknown or expired.");
         }
         return AuthenticateResult.Success(new AuthenticationTicket(Principal(session, SchemeName), SchemeName));

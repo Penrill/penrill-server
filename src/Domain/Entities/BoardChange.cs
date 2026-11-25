@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>
 /// One accepted change in a board's log. <see cref="Body"/> is cleared once a later snapshot covers it;

@@ -4,9 +4,9 @@
     <Project Path="src/Application/Application.csproj" />
     <Project Path="src/Domain/Domain.csproj" />
     <Project Path="src/Infrastructure/Infrastructure.csproj" />
-    <Project Path="src/Server/Penrill.Server.csproj" />
     <Project Path="src/ServiceDefaults/ServiceDefaults.csproj" />
     <Project Path="src/Shared/Shared.csproj" />
+    <Project Path="src/Sync/Sync.csproj" />
     <Project Path="src/Web/Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
@@ -15,5 +15,6 @@
     <Project Path="tests/Contract/Contract.csproj" />
     <Project Path="tests/Domain.UnitTests/Domain.UnitTests.csproj" />
     <Project Path="tests/Infrastructure.IntegrationTests/Infrastructure.IntegrationTests.csproj" />
+    <Project Path="tests/TestAppHost/TestAppHost.csproj" />
   </Folder>
 </Solution>

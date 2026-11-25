@@ -1,13 +1,13 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Live;
-using Penrill.Domain.Boards;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Sync.Live;
+using Sync.Protocol;
 
-namespace Penrill.Application.Boards.Commands.SubmitChange;
+namespace Application.Boards.Commands.SubmitChange;
 
 /// <summary>
 /// Submits one change over HTTP, for clients without a live connection. Returns the change's sequence number;

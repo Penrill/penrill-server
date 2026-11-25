@@ -1,11 +1,11 @@
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 using NUnit.Framework;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Web.Infrastructure;
+using Application.Common.Exceptions;
+using Web.Infrastructure;
 using Shouldly;
 
-namespace Penrill.Application.UnitTests.Web;
+namespace Application.UnitTests.Web;
 
 /// <summary>Editors read the status and, for some refusals, a <c>reason</c> word from the JSON body.</summary>
 public class ProblemDetailsExceptionHandlerTests

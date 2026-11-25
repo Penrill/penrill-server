@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
-using Penrill.Application.Accounts;
+using Application.Accounts;
 
-namespace Penrill.Application.Linking;
+namespace Application.Linking;
 
 /// <summary>
 /// The life of one link request (State pattern). Every transition goes through <see cref="LinkRequest"/>,

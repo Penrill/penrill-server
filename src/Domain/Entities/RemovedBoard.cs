@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>
 /// A board its owner deleted and asked to take off the devices of everyone it was shared with. Those devices

@@ -1,7 +1,7 @@
 using System.Text.Json.Nodes;
-using Penrill.Domain.Boards;
+using Sync.Protocol;
 
-namespace Penrill.Domain.UnitTests.Boards;
+namespace Domain.UnitTests.Boards;
 
 public class ChangeTests
 {

@@ -1,10 +1,10 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Accounts.Commands.CreateInvite;
+namespace Application.Accounts.Commands.CreateInvite;
 
 /// <summary>Creates an invite link that lets one or more people create an account.</summary>
-[Authorize(Roles = $"{nameof(Penrill.Domain.Enums.Role.Admin)},{nameof(Penrill.Domain.Enums.Role.Owner)}")]
+[Authorize(Roles = $"{nameof(Domain.Enums.Role.Admin)},{nameof(Domain.Enums.Role.Owner)}")]
 public record CreateInviteCommand(string? Role, int? Uses, int? Days) : IRequest<CreatedInviteDto>;
 
 public sealed record CreatedInviteDto(string Id, string Token, string Role, int UsesLeft, DateTimeOffset? Expires, string CreatedBy);

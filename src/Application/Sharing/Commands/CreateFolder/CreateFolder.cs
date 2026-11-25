@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Commands.CreateFolder;
+namespace Application.Sharing.Commands.CreateFolder;
 
 /// <summary>Makes a folder with the signed-in user as its owner and first member.</summary>
 [Authorize(Policy = Policies.NoGuests)]
@@ -9,7 +9,7 @@ public record CreateFolderCommand(string? Name) : IRequest<string>;
 
 public class CreateFolderCommandValidator : AbstractValidator<CreateFolderCommand>
 {
-    public CreateFolderCommandValidator() => RuleFor(c => c.Name).Must(BoardLimits.IsLabel);
+    public CreateFolderCommandValidator() => RuleFor(c => c.Name).Must(ProtocolConstants.IsLabel);
 }
 
 public class CreateFolderCommandHandler(IApplicationDbContext context, IUser user) : IRequestHandler<CreateFolderCommand, string>

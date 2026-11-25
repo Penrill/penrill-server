@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Penrill.Domain.Constants;
-using Penrill.Infrastructure.Identity;
+using Domain.Constants;
+using Infrastructure.Identity;
 
-namespace Penrill.Infrastructure.Data.Configurations;
+namespace Infrastructure.Data.Configurations;
 
 public class BoardConfiguration : IEntityTypeConfiguration<Board>
 {
@@ -10,8 +10,8 @@ public class BoardConfiguration : IEntityTypeConfiguration<Board>
     {
         builder.HasKey(b => b.Id);
         builder.Property(b => b.Id).HasMaxLength(64);
-        builder.Property(b => b.Title).HasMaxLength(BoardLimits.MaxTitle);
-        builder.Property(b => b.Background).HasMaxLength(BoardLimits.MaxBackground);
+        builder.Property(b => b.Title).HasMaxLength(ProtocolConstants.MaxTitle);
+        builder.Property(b => b.Background).HasMaxLength(ProtocolConstants.MaxBackground);
         builder.Property(b => b.Owner).HasMaxLength(256);
         // A board outlives its owner's account; an administrator can hand it on.
         builder.HasOne<ApplicationUser>().WithMany().HasForeignKey(b => b.Owner).OnDelete(DeleteBehavior.SetNull);
@@ -33,7 +33,7 @@ public class BoardChangeConfiguration : IEntityTypeConfiguration<BoardChange>
     public void Configure(EntityTypeBuilder<BoardChange> builder)
     {
         builder.HasKey(c => new { c.BoardId, c.Seq });
-        builder.Property(c => c.ChangeId).HasMaxLength(BoardLimits.MaxChangeId);
+        builder.Property(c => c.ChangeId).HasMaxLength(ProtocolConstants.MaxChangeId);
         builder.Property(c => c.Author).HasMaxLength(256);
         builder.HasIndex(c => new { c.BoardId, c.ChangeId }).IsUnique();
         builder.HasOne<Board>().WithMany().HasForeignKey(c => c.BoardId).OnDelete(DeleteBehavior.Cascade);

@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Constants;
+namespace Domain.Constants;
 
 public static class SettingKeys
 {

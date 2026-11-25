@@ -55,7 +55,7 @@ public static class Extensions
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
-                    // Board, change, live connection and sign-in metrics (Penrill.Application.Common.Telemetry).
+                    // Board, change, live connection and sign-in metrics (Sync.Live).
                     .AddMeter("Penrill");
             })
             .WithTracing(tracing =>

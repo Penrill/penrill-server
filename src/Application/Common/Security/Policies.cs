@@ -1,4 +1,4 @@
-namespace Penrill.Application.Common.Security;
+namespace Application.Common.Security;
 
 public static class Policies
 {

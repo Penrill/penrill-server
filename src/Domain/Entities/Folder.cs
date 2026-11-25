@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>A group of people and the boards shared with them, such as a class.</summary>
 public class Folder

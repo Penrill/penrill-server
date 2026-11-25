@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Enums;
+namespace Domain.Enums;
 
 /// <summary>
 /// <c>Guest</c> is the account a draw link makes for someone who just wants to draw on one board: it can work on boards

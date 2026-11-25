@@ -1,8 +1,8 @@
-using Penrill.Application.Accounts;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Accounts;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Linking.Queries.GetDevices;
+namespace Application.Linking.Queries.GetDevices;
 
 /// <summary>The editors linked to the signed-in account; <c>Current</c> marks the one asking.</summary>
 [Authorize]

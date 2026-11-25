@@ -1,6 +1,6 @@
-using Penrill.Application.Live;
+using Sync.Live;
 
-namespace Penrill.Application.Boards;
+namespace Application.Boards;
 
 public static class RoomExtensions
 {

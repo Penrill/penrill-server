@@ -1,8 +1,8 @@
-using Penrill.Application.Accounts;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Accounts;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Linking.Commands.RevokeDevice;
+namespace Application.Linking.Commands.RevokeDevice;
 
 /// <summary>Unlinks one of the signed-in account's devices; it is signed out at once.</summary>
 [Authorize]

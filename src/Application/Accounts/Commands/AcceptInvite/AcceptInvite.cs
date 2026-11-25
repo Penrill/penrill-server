@@ -1,6 +1,6 @@
-using Penrill.Application.Common.Exceptions;
+using Application.Common.Exceptions;
 
-namespace Penrill.Application.Accounts.Commands.AcceptInvite;
+namespace Application.Accounts.Commands.AcceptInvite;
 
 /// <summary>Creates an account using an invite link and signs it in.</summary>
 public record AcceptInviteCommand(string Token, string? Name, string? Password) : IRequest<SignedIn>;

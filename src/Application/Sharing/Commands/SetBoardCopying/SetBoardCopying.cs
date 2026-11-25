@@ -1,9 +1,9 @@
-using Penrill.Application.Boards;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Boards;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Commands.SetBoardCopying;
+namespace Application.Sharing.Commands.SetBoardCopying;
 
 /// <summary>The owner lets the people a board is shared with duplicate, export and copy it out, or stops them.</summary>
 [Authorize]

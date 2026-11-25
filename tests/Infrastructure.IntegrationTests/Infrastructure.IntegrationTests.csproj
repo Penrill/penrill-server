@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <RootNamespace>Penrill.Infrastructure.IntegrationTests</RootNamespace>
-        <AssemblyName>Penrill.Infrastructure.IntegrationTests</AssemblyName>
+        <RootNamespace>Infrastructure.IntegrationTests</RootNamespace>
+        <AssemblyName>Infrastructure.IntegrationTests</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Aspire.Hosting.Testing" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" />
-        <PackageReference Include="NUnit" />
+        <PackageReference Include="nunit" />
         <PackageReference Include="NUnit3TestAdapter" />
         <PackageReference Include="NUnit.Analyzers">
           <PrivateAssets>all</PrivateAssets>
@@ -17,11 +18,19 @@
           <PrivateAssets>all</PrivateAssets>
           <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
+        <PackageReference Include="Respawn" />
         <PackageReference Include="Shouldly" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\src\Server\Penrill.Server.csproj" />
+        <Using Include="Aspire.Hosting" />
+        <Using Include="Aspire.Hosting.ApplicationModel" />
+        <Using Include="Aspire.Hosting.Testing" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Web\Web.csproj" />
+        <ProjectReference Include="..\TestAppHost\TestAppHost.csproj" />
     </ItemGroup>
 
 </Project>

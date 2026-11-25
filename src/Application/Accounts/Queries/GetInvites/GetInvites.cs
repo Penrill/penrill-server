@@ -1,6 +1,6 @@
-using Penrill.Application.Common.Security;
+using Application.Common.Security;
 
-namespace Penrill.Application.Accounts.Queries.GetInvites;
+namespace Application.Accounts.Queries.GetInvites;
 
 /// <summary>Open invite links on this host, newest first.</summary>
 [Authorize(Roles = $"{nameof(Role.Admin)},{nameof(Role.Owner)}")]

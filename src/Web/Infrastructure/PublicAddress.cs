@@ -1,4 +1,4 @@
-namespace Penrill.Web.Infrastructure;
+namespace Web.Infrastructure;
 
 /// <summary>
 /// Where people reach this host: the origin put into link pages and connect links, and the certificate pin editors

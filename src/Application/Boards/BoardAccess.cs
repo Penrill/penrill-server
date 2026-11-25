@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
 
-namespace Penrill.Application.Boards;
+namespace Application.Boards;
 
 public enum BoardAccess { Missing, Denied, Allowed }
 
@@ -47,5 +47,5 @@ public static class BoardAccessExtensions
 public static class BoardRules
 {
     public static IRuleBuilderOptions<T, string> MustBeBoardId<T>(this IRuleBuilder<T, string> rule) =>
-        rule.Must(BoardLimits.IsBoardId).WithMessage("Not a board id.");
+        rule.Must(ProtocolConstants.IsBoardId).WithMessage("Not a board id.");
 }

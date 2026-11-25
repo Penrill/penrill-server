@@ -3,7 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 
-namespace Penrill.Application.FunctionalTests.Sharing;
+namespace Application.FunctionalTests.Sharing;
 
 /// <summary>The owner decides whether people may copy a shared board, and whether they keep it once it is deleted.</summary>
 public class CopyingTests
@@ -12,7 +12,11 @@ public class CopyingTests
     private ServerFactory factory = null!;
 
     [SetUp]
-    public void SetUp() => factory = new ServerFactory(openRegistration: true);
+    public async Task SetUp()
+    {
+        await FunctionalTestSetup.DbResetter.ResetAsync();
+        factory = new ServerFactory(openRegistration: true);
+    }
 
     [TearDown]
     public async Task TearDown() => await factory.DisposeAsync();

@@ -1,7 +1,7 @@
-﻿using Penrill.Application.Common.Models;
+﻿using Application.Common.Models;
 using Microsoft.AspNetCore.Identity;
 
-namespace Penrill.Infrastructure.Identity;
+namespace Infrastructure.Identity;
 
 public static class IdentityResultExtensions
 {

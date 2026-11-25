@@ -1,7 +1,7 @@
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Templates.Queries.GetTemplate;
+namespace Application.Templates.Queries.GetTemplate;
 
 /// <summary>The board file of a template the user can see.</summary>
 [Authorize]

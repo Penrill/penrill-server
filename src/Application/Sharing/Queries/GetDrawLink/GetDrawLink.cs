@@ -1,8 +1,8 @@
-using Penrill.Application.Boards;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Boards;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Queries.GetDrawLink;
+namespace Application.Sharing.Queries.GetDrawLink;
 
 /// <summary>The board's draw link token, null while the link is off. Not found for anyone but the owner.</summary>
 [Authorize]

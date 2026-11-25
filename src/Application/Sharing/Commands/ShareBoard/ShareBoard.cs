@@ -1,9 +1,9 @@
-using Penrill.Application.Boards;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Boards;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Commands.ShareBoard;
+namespace Application.Sharing.Commands.ShareBoard;
 
 /// <summary>The board's owner shares it into a folder they are in. A conflict when either is not theirs.</summary>
 [Authorize(Policy = Policies.NoGuests)]
@@ -14,7 +14,7 @@ public class ShareBoardCommandValidator : AbstractValidator<ShareBoardCommand>
     public ShareBoardCommandValidator()
     {
         RuleFor(c => c.Folder).NotEmpty();
-        RuleFor(c => c.Board).Must(BoardLimits.IsBoardId);
+        RuleFor(c => c.Board).Must(ProtocolConstants.IsBoardId);
     }
 }
 

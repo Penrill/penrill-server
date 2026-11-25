@@ -1,8 +1,8 @@
-using Penrill.Application.Boards;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
+using Application.Boards;
+using Application.Common.Interfaces;
+using Application.Common.Security;
 
-namespace Penrill.Application.Sharing.Commands.RemoveBoardPerson;
+namespace Application.Sharing.Commands.RemoveBoardPerson;
 
 /// <summary>The owner takes someone off the board; if they are on it right now they are disconnected.</summary>
 [Authorize]

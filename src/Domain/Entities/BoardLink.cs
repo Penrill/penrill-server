@@ -1,4 +1,4 @@
-namespace Penrill.Domain.Entities;
+namespace Domain.Entities;
 
 /// <summary>A board's draw link: anyone with the token may join the board as a guest until the owner turns it off.</summary>
 public class BoardLink

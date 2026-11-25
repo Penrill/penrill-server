@@ -1,4 +1,4 @@
-namespace Penrill.Application.Accounts.Queries.CheckInvite;
+namespace Application.Accounts.Queries.CheckInvite;
 
 /// <summary>Checks whether an invite link is still valid before showing the registration form.</summary>
 public record CheckInviteQuery(string Token) : IRequest;

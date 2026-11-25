@@ -1,8 +1,8 @@
 using MediatR.Pipeline;
 using Microsoft.Extensions.Logging;
-using Penrill.Application.Common.Interfaces;
+using Application.Common.Interfaces;
 
-namespace Penrill.Application.Common.Behaviours;
+namespace Application.Common.Behaviours;
 
 /// <summary>
 /// Logs which request ran and for whom. The request itself is not logged: it may carry passwords,

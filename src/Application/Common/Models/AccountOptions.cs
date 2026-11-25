@@ -1,4 +1,4 @@
-namespace Penrill.Application.Common.Models;
+namespace Application.Common.Models;
 
 public sealed class AccountOptions
 {

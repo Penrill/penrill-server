@@ -22,7 +22,20 @@ jobs:
       - run: dotnet build Penrill.slnx --no-restore -c Release
       - run: dotnet test Penrill.slnx --no-build --configuration Release
 
-      - name: The model and the SQLite migrations agree
+      - name: PostgreSQL migrations check or bootstrap
+        id: ef
         run: |
           dotnet tool install --global dotnet-ef --version 10.0.15
-          dotnet ef migrations has-pending-model-changes --project src/Server --startup-project src/Server --no-build --configuration Release
+          if [ -d src/Infrastructure/Data/Migrations ] && ls src/Infrastructure/Data/Migrations/*.cs >/dev/null 2>&1; then
+            dotnet ef migrations has-pending-model-changes --project src/Infrastructure --startup-project src/Infrastructure --no-build --configuration Release
+          else
+            dotnet ef migrations add Initial --project src/Infrastructure --startup-project src/Infrastructure --output-dir Data/Migrations --configuration Release
+            echo "generated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload generated Initial migration
+        if: steps.ef.outputs.generated == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: initial-migrations
+          path: src/Infrastructure/Data/Migrations

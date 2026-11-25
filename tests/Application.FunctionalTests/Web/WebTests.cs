@@ -3,9 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Penrill.Application.Accounts;
+using Application.Accounts;
 
-namespace Penrill.Application.FunctionalTests.Web;
+namespace Application.FunctionalTests.Web;
 
 /// <summary>The JSON API behind the server's own web app: setup, the session cookie, its guard against other sites, and roles.</summary>
 public class WebTests
@@ -14,7 +14,11 @@ public class WebTests
     private ServerFactory factory = null!;
 
     [SetUp]
-    public void SetUp() => factory = new ServerFactory();
+    public async Task SetUp()
+    {
+        await FunctionalTestSetup.DbResetter.ResetAsync();
+        factory = new ServerFactory();
+    }
 
     [TearDown]
     public async Task TearDown() => await factory.DisposeAsync();

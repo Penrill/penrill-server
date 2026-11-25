@@ -1,4 +1,4 @@
-namespace Penrill.Application.Common.Models;
+namespace Application.Common.Models;
 
 public sealed record AccountInfo(string Name, Role Role, bool Disabled, DateTimeOffset? Created);
 

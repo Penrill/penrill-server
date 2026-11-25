@@ -1,10 +1,10 @@
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Sharing.Queries.GetCommunity;
-using Penrill.Domain.Boards;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Application.Sharing.Queries.GetCommunity;
+using Sync.Protocol;
 
-namespace Penrill.Application.Templates.Commands.PublishTemplate;
+namespace Application.Templates.Commands.PublishTemplate;
 
 /// <summary>Shares a board file as a template with everyone (no folder) or with one folder the author is in.</summary>
 [Authorize(Policy = Policies.NoGuests)]
@@ -14,7 +14,7 @@ public class PublishTemplateCommandValidator : AbstractValidator<PublishTemplate
 {
     public PublishTemplateCommandValidator()
     {
-        RuleFor(c => c.Name).Must(BoardLimits.IsLabel);
+        RuleFor(c => c.Name).Must(ProtocolConstants.IsLabel);
         RuleFor(c => c.Data).Must(data => TemplateFile.IsBoard(data)).WithMessage("Not a board file.");
     }
 }

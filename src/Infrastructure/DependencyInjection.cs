@@ -1,43 +1,38 @@
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Infrastructure.Assets;
+using Infrastructure.Data;
+using Infrastructure.Data.Interceptors;
+using Infrastructure.Identity;
+using Infrastructure.Sync;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Domain.Constants;
-using Penrill.Domain.Enums;
-using Penrill.Infrastructure.Assets;
-using Penrill.Infrastructure.Data;
-using Penrill.Infrastructure.Data.Interceptors;
-using Penrill.Infrastructure.Identity;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
-public static class DependencyInjection
+public static class InfrastructureDependencyInjection
 {
-    /// <summary>The Penrill model on the database <paramref name="useDatabase"/> picks (provider, connection, migrations assembly).</summary>
-    public static void AddInfrastructureServices(this IHostApplicationBuilder builder, Action<IServiceProvider, DbContextOptionsBuilder> useDatabase) =>
-        builder.AddInfrastructureServices<ApplicationDbContext>(useDatabase);
-
-    /// <summary>
-    /// As above, with a context of the host's own that derives from <see cref="ApplicationDbContext"/> and adds data
-    /// only that host keeps.
-    /// </summary>
-    public static void AddInfrastructureServices<TContext>(this IHostApplicationBuilder builder, Action<IServiceProvider, DbContextOptionsBuilder> useDatabase)
-        where TContext : ApplicationDbContext
+    public static ServerData AddInfrastructureServices(this IHostApplicationBuilder builder)
     {
+        var data = ServerData.From(builder.Configuration, builder.Environment);
+        var connectionString = builder.Configuration.GetConnectionString(Services.Database);
+        Guard.Against.NullOrWhiteSpace(connectionString, message: $"Connection string '{Services.Database}' not found.");
+
         var services = builder.Services;
+        services.AddSingleton(data);
         services.AddScoped<ISaveChangesInterceptor, AuditableEntityInterceptor>();
         services.AddScoped<ISaveChangesInterceptor, DispatchDomainEventsInterceptor>();
 
-        services.AddDbContext<TContext>((sp, options) =>
+        services.AddDbContext<ApplicationDbContext>((sp, options) =>
         {
             options.AddInterceptors(sp.GetServices<ISaveChangesInterceptor>());
-            useDatabase(sp, options);
+            options.UseNpgsql(connectionString, npgsql => npgsql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.GetName().Name));
         });
-        if (typeof(TContext) != typeof(ApplicationDbContext))
-            services.AddScoped<ApplicationDbContext>(provider => provider.GetRequiredService<TContext>());
-        services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<TContext>());
+        builder.EnrichNpgsqlDbContext<ApplicationDbContext>(settings => settings.DisableRetry = true);
+        services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
         services.AddScoped<ApplicationDbContextInitialiser>();
 
         services.AddAuthorizationBuilder()
@@ -55,13 +50,20 @@ public static class DependencyInjection
                 options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyz0123456789_-";
             })
             .AddRoles<IdentityRole>()
-            .AddEntityFrameworkStores<TContext>();
+            .AddEntityFrameworkStores<ApplicationDbContext>();
 
         services.TryAddSingleton(TimeProvider.System);
         services.AddTransient<IIdentityService, IdentityService>();
+        services.AddFileAssetStore(data.Assets);
+        services.AddSingleton<IBackupWriter>(_ => new PostgresBackupWriter(data, connectionString));
+
+        services.AddSingleton<IBoardStore, PostgresBoardStore>();
+        services.AddSingleton<ILiveAuthenticator, ServerLiveAuthenticator>();
+        services.AddSingleton<ILiveAccessPolicy, ServerLiveAccessPolicy>();
+
+        return data;
     }
 
-    /// <summary>Keeps images as files under <paramref name="directory"/>.</summary>
     public static IServiceCollection AddFileAssetStore(this IServiceCollection services, string directory)
     {
         services.AddSingleton(new FileAssetOptions { Directory = directory });

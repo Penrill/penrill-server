@@ -1,13 +1,13 @@
 using Moq;
 using NUnit.Framework;
-using Penrill.Application.Common.Behaviours;
-using Penrill.Application.Common.Exceptions;
-using Penrill.Application.Common.Interfaces;
-using Penrill.Application.Common.Security;
-using Penrill.Application.Sharing.Commands.CreateFolder;
+using Application.Common.Behaviours;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Security;
+using Application.Sharing.Commands.CreateFolder;
 using Shouldly;
 
-namespace Penrill.Application.UnitTests.Common.Behaviours;
+namespace Application.UnitTests.Common.Behaviours;
 
 public class AuthorizationBehaviourTests
 {

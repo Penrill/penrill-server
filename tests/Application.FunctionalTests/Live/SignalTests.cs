@@ -8,9 +8,9 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
-using Penrill.Domain.Entities;
+using Domain.Entities;
 
-namespace Penrill.Application.FunctionalTests.Live;
+namespace Application.FunctionalTests.Live;
 
 /// <summary>Cursors and ink in flight reach the others while the sender's own changes are still being stored.</summary>
 public class SignalTests
@@ -20,8 +20,9 @@ public class SignalTests
     private WebApplicationFactory<Program> factory = null!;
 
     [SetUp]
-    public void SetUp()
+    public async Task SetUp()
     {
+        await FunctionalTestSetup.DbResetter.ResetAsync();
         server = new ServerFactory(openRegistration: true);
         factory = server.WithWebHostBuilder(builder =>
             builder.ConfigureTestServices(services => services.AddScoped<ISaveChangesInterceptor, SlowChanges>()));

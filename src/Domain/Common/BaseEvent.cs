@@ -1,6 +1,6 @@
 ﻿using MediatR;
 
-namespace Penrill.Domain.Common;
+namespace Domain.Common;
 
 public abstract class BaseEvent : INotification
 {

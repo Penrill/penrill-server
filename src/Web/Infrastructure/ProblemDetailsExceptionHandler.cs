@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
-using Penrill.Application.Common.Exceptions;
+using Application.Common.Exceptions;
 
-namespace Penrill.Web.Infrastructure;
+namespace Web.Infrastructure;
 
 /// <summary>
 /// Turns the refusals of use cases into RFC 9110 <see cref="ProblemDetails"/> with the status editors expect.

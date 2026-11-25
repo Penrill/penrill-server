@@ -1,6 +1,6 @@
-using Penrill.Application.Common.Security;
+using Application.Common.Security;
 
-namespace Penrill.Application.Linking.Queries.GetLinkRequest;
+namespace Application.Linking.Queries.GetLinkRequest;
 
 /// <summary>Which device waits under a code, for the approval page. Not found once it is decided or expired.</summary>
 [Authorize]

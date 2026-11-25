@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <RootNamespace>Penrill.Application.UnitTests</RootNamespace>
-        <AssemblyName>Penrill.Application.UnitTests</AssemblyName>
+        <RootNamespace>Application.UnitTests</RootNamespace>
+        <AssemblyName>Application.UnitTests</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
