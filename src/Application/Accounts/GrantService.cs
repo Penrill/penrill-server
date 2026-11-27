@@ -63,9 +63,15 @@ public sealed partial class GrantService(
     /// <summary>What a link is for, to show the right page before anyone fills it in.</summary>
     public async Task<Grant?> Peek(string? token, CancellationToken cancellationToken)
     {
-        if (!IsToken(token)) return null;
-        var hash = AccountService.HashToken(token!);
-        var grant = await context.Grants.AsNoTracking().FirstOrDefaultAsync(g => g.TokenHash == hash, cancellationToken);
+        var normalized = NormalizeToken(token);
+        if (normalized is null) return null;
+        var hashes = new[]
+        {
+            AccountService.HashToken(normalized),
+            AccountService.HashToken(normalized.ToUpperInvariant()),
+            AccountService.HashToken(normalized.ToLowerInvariant())
+        }.Distinct(StringComparer.Ordinal).ToArray();
+        var grant = await context.Grants.AsNoTracking().FirstOrDefaultAsync(g => hashes.Contains(g.TokenHash), cancellationToken);
         return grant is not null && grant.IsValidAt(time.GetUtcNow()) ? grant : null;
     }
 
@@ -114,7 +120,14 @@ public sealed partial class GrantService(
         return new(result.Errors.Contains(AccountErrors.Taken) ? RedeemStatus.Taken : RedeemStatus.Invalid);
     }
 
-    private static bool IsToken(string? token) => token is { Length: 64 } && token.All(Uri.IsHexDigit);
+    private static string? NormalizeToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return null;
+        var trimmed = token.Trim();
+        var slash = trimmed.LastIndexOf('/');
+        if (slash >= 0 && slash < trimmed.Length - 1) trimmed = trimmed[(slash + 1)..].Trim();
+        return trimmed.Length == 64 && trimmed.All(Uri.IsHexDigit) ? trimmed : null;
+    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Server claimed by {User}")]
     private static partial void LogClaimed(ILogger logger, string user);

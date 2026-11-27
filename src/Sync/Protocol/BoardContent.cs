@@ -11,7 +11,7 @@ public sealed record BoardContent(string Title, string Background, IReadOnlyList
         var maxItems = (limits ?? BoardLimitPolicy.SelfHostedDefault).MaxItems;
         content = null;
         if (node is not JsonObject root || !Json.HasOnly(root, "title", "background", "items") ||
-            !Json.TryText(root["title"], ProtocolConstants.MaxTitle, out var title) ||
+            !TryBoardTitle(root["title"], out var title) ||
             !Json.TryText(root["background"], ProtocolConstants.MaxBackground, out var background) ||
             root["items"] is not JsonArray array || array.Count > maxItems) return false;
         var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -23,6 +23,15 @@ public sealed record BoardContent(string Title, string Background, IReadOnlyList
         }
         array.Clear();
         content = new BoardContent(title, background, items);
+        return true;
+    }
+
+    private static bool TryBoardTitle(JsonNode? node, [NotNullWhen(true)] out string? title)
+    {
+        title = null;
+        if (node is not JsonValue value || !value.TryGetValue(out string? candidate) || candidate.Length > ProtocolConstants.MaxTitle)
+            return false;
+        title = string.IsNullOrWhiteSpace(candidate) ? "Untitled" : candidate;
         return true;
     }
 

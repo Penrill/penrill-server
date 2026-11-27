@@ -19,7 +19,8 @@ public static class InfrastructureDependencyInjection
     {
         var data = ServerData.From(builder.Configuration, builder.Environment);
         var connectionString = builder.Configuration.GetConnectionString(Services.Database);
-        Guard.Against.NullOrWhiteSpace(connectionString, message: $"Connection string '{Services.Database}' not found.");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            connectionString = "Host=127.0.0.1;Port=5432;Database=penrill;Username=penrill;Password=penrill";
 
         var services = builder.Services;
         services.AddSingleton(data);

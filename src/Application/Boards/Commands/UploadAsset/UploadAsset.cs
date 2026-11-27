@@ -24,10 +24,17 @@ public class UploadAssetCommandHandler(IApplicationDbContext context, IUser user
     public static readonly IReadOnlySet<string> ImageTypes =
         new HashSet<string> { "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "image/svg+xml" };
 
+    public static string? NormalizeImageType(string? contentType) => contentType?.Trim().ToLowerInvariant() switch
+    {
+        "image/jpg" or "image/pjpeg" => "image/jpeg",
+        "image/x-png" => "image/png",
+        var value => value
+    };
+
     public async Task Handle(UploadAssetCommand request, CancellationToken cancellationToken)
     {
         await context.EnsureAccessAsync(user.Id!, request.BoardId, cancellationToken);
-        var type = request.ContentType?.ToLowerInvariant();
+        var type = NormalizeImageType(request.ContentType);
         if (type is null || !ImageTypes.Contains(type)) throw new UnsupportedMediaTypeException();
         if (request.Content.Length > BoardLimitPolicy.SelfHostedDefault.MaxAssetBytes) throw new PayloadTooLargeException();
         if (Convert.ToHexStringLower(SHA256.HashData(request.Content)) != request.Hash) throw new BadRequestException("hash-mismatch");
