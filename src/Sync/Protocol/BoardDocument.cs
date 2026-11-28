@@ -81,12 +81,25 @@ public sealed class BoardDocument
         writer.WriteEndObject();
     }
 
+    public void AdvanceSeq(long seq)
+    {
+        if (seq > Seq) Seq = seq;
+    }
+
     public static IReadOnlyList<JsonObject> ReadItems(ReadOnlySpan<byte> json)
     {
-        if (JsonNode.Parse(json) is not JsonArray array) throw new InvalidDataException("Board items must be a JSON array.");
-        var items = array.Select(node => node as JsonObject ?? throw new InvalidDataException("Board item must be an object.")).ToList();
-        array.Clear();
-        return items;
+        if (json.IsEmpty) return [];
+        try
+        {
+            if (JsonNode.Parse(json) is not JsonArray array) return [];
+            var items = array.Where(node => node is JsonObject).Select(node => (JsonObject)node!).ToList();
+            array.Clear();
+            return items;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
     }
 
     private void WriteItems(Utf8JsonWriter writer)

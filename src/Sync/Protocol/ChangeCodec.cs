@@ -67,8 +67,17 @@ public static class ChangeCodec
     {
         if (!Json.HasOnly(op, "op", "title", "background")) return null;
         string? title = null, background = null;
-        if (op["title"] is not null && !Json.TryText(op["title"], ProtocolConstants.MaxTitle, out title)) return null;
+        if (op["title"] is not null && !TryMetaTitle(op["title"], out title)) return null;
         if (op["background"] is not null && !Json.TryText(op["background"], ProtocolConstants.MaxBackground, out background)) return null;
         return title is null && background is null ? null : new SetMeta(title, background);
+    }
+
+    private static bool TryMetaTitle(JsonNode? node, [NotNullWhen(true)] out string? title)
+    {
+        title = null;
+        if (node is not JsonValue value || !value.TryGetValue(out string? candidate) || candidate.Length > ProtocolConstants.MaxTitle)
+            return false;
+        title = string.IsNullOrWhiteSpace(candidate) ? "Untitled" : candidate;
+        return true;
     }
 }

@@ -81,18 +81,28 @@ public sealed partial class BoardRoom
         if (stored is null) return null;
         var document = new BoardDocument(stored.Id, stored.SnapshotSeq, stored.Title, stored.Background, BoardDocument.ReadItems(stored.Items));
         var recent = new RecentChanges(options.RecentChanges, options.RecentBytes);
+        var replayLimits = new BoardLimitPolicy { MaxOpsPerChange = 1_000_000, MaxItems = 1_000_000 };
         foreach (var change in stored.Recent)
         {
             if (change.Seq > document.Seq)
             {
-                if (change.Seq != document.Seq + 1 || !ChangeCodec.TryParse(JsonNode.Parse(change.Body), out var parsed))
-                    throw new InvalidDataException($"The log of board {boardId} is broken at seq {change.Seq}.");
-                document.Apply(change.Seq, parsed);
+                JsonNode? node = null;
+                try { node = JsonNode.Parse(change.Body); }
+                catch (JsonException) { }
+                if (ChangeCodec.TryParse(node, out var parsed, replayLimits))
+                {
+                    document.Apply(change.Seq, parsed);
+                }
+                else
+                {
+                    logger.LogWarning("Skipping unparseable change at seq {Seq} while loading board {Board}", change.Seq, boardId);
+                    document.AdvanceSeq(change.Seq);
+                }
             }
             recent.Add(change);
         }
-        if (document.Seq != stored.Seq)
-            throw new InvalidDataException($"The log of board {boardId} ends at seq {document.Seq}, expected {stored.Seq}.");
+        if (document.Seq < stored.Seq)
+            document.AdvanceSeq(stored.Seq);
         var elapsed = time.GetElapsedTime(started).TotalMilliseconds;
         SyncTelemetry.LoadDuration.Record(elapsed);
         SyncTelemetry.ActiveRooms.Add(1);

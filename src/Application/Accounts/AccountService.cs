@@ -80,16 +80,25 @@ public sealed partial class AccountService(
 
     public async Task<AuthenticatedSession?> Authenticate(string token, CancellationToken cancellationToken)
     {
-        if (token.Length != 64) return null;
-        var hash = HashToken(token);
+        var trimmed = token.Trim();
+        if (trimmed.Length != 64) return null;
+        var hash = HashToken(trimmed);
         var now = time.GetUtcNow();
-        var credential = await context.Credentials.FirstOrDefaultAsync(c => c.TokenHash == hash, cancellationToken);
+        var credential = await context.Credentials.AsNoTracking().FirstOrDefaultAsync(c => c.TokenHash == hash, cancellationToken);
         if (credential is null || !credential.IsValidAt(now)) return null;
         if (await identity.FindAsync(credential.UserId) is not { Disabled: false } account) return null;
         if (credential.LastUsed is not { } last || now - last > TouchEvery)
         {
-            credential.LastUsed = now;
-            await context.SaveChangesAsync(cancellationToken);
+            try
+            {
+                await context.Credentials
+                    .Where(c => c.Id == credential.Id)
+                    .ExecuteUpdateAsync(set => set.SetProperty(c => c.LastUsed, now), cancellationToken);
+            }
+            catch
+            {
+                // Best-effort timestamp touch; never fail authentication on concurrent requests.
+            }
         }
         return new AuthenticatedSession(credential.UserId, account.Role, credential.Id, credential.Kind, credential.Expires);
     }
